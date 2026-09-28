@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "Uplane Compliance Copilot",
+  "version": "0.1.0",
+  "description": "Flags brand & legal compliance issues on Uplane concept-share pages, against the client's knowledge base.",
+  "permissions": ["storage", "tabs"],
+  "host_permissions": [
+    "http://127.0.0.1:8787/*",
+    "http://localhost:8787/*",
+    "https://app.uplane.com/*",
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Uplane Compliance Copilot",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://app.uplane.com/share/concepts*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

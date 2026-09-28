@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Uplane Compliance — Excel Review</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  body { margin: 0; background: #0b0d12; color: #e8eaed; display: flex; justify-content: center; padding: 40px 16px; }
+  .wrap { width: 100%; max-width: 560px; }
+  h1 { font-size: 20px; margin: 0 0 4px; display: flex; align-items: center; gap: 9px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: #4b9eff; box-shadow: 0 0 9px #4b9eff; }
+  .sub { color: #8b93a3; font-size: 13px; margin: 0 0 20px; }
+  .card { background: #0f1115; border: 1px solid #2a2f3a; border-radius: 14px; padding: 18px; margin-bottom: 14px; }
+  label.fld { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: #8b93a3; margin: 0 0 6px; }
+  select { width: 100%; padding: 10px; background: #1b2030; color: #e8eaed; border: 1px solid #2c3344; border-radius: 9px; font-size: 14px; }
+  .row { display: flex; gap: 10px; }
+  .row > * { flex: 1; }
+  .gap { height: 14px; }
+  .seg { display: flex; gap: 8px; }
+  .seg button { flex: 1; padding: 10px; border-radius: 9px; border: 1px solid #2c3344; background: #1b2030; color: #cdd3df; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .seg button.on { background: #3b82f6; color: #fff; border-color: #3b82f6; }
+  .hint { font-size: 12px; color: #8b93a3; margin-top: 6px; }
+  #drop { border: 1.5px dashed #344056; border-radius: 12px; padding: 30px 16px; text-align: center; color: #9aa3b2; cursor: pointer; transition: .15s; }
+  #drop.hover { border-color: #4b9eff; background: #11151f; color: #cdd3df; }
+  #drop b { color: #cdd3df; }
+  #fname { color: #7db1ff; font-weight: 600; }
+  button.go { width: 100%; padding: 12px; border-radius: 10px; border: none; background: #3b82f6; color: #fff; font-size: 15px; font-weight: 700; cursor: pointer; }
+  button.go:disabled { opacity: .5; cursor: default; }
+  .prog { height: 10px; background: #1b2030; border-radius: 7px; overflow: hidden; margin: 12px 0 6px; }
+  .prog > i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #3b82f6, #7db1ff); transition: width .3s; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+  .chip { padding: 5px 11px; border-radius: 8px; font-size: 13px; font-weight: 700; }
+  .chip.go { background: #143024; color: #54d088; } .chip.minor { background: #33290f; color: #f0c050; }
+  .chip.major { background: #3a1a1d; color: #ff7a7a; } .chip.err { background: #2a2f3a; color: #aeb6c4; }
+  .statline { font-size: 13px; color: #9aa3b2; }
+  a.dl { display: inline-block; margin-top: 8px; padding: 11px 16px; border-radius: 10px; background: #143024; color: #54d088; font-weight: 700; text-decoration: none; border: 1px solid #1f5138; }
+  .err { color: #ff9b9b; font-size: 13px; }
+  .muted { color: #8b93a3; font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1><span class="dot"></span> Compliance Copilot — Excel Review</h1>
+  <p class="sub">Drop a review-board spreadsheet. It checks every <b>“To Review”</b> row against the client's knowledge base and writes the comments into the Feedback column. &nbsp;·&nbsp; <a href="/notes" style="color:#7db1ff;text-decoration:none">Notes &amp; Memory →</a></p>
+
+  <div class="card">
+    <div class="row">
+      <div>
+        <label class="fld">Client</label>
+        <select id="client"><option>loading…</option></select>
+      </div>
+      <div>
+        <label class="fld">Enforcement</label>
+        <div class="seg" id="mode">
+          <button data-m="normal" class="on">Normal</button>
+          <button data-m="strict">Strict</button>
+        </div>
+      </div>
+    </div>
+    <div class="hint" id="modehint">Normal — flags only direct, explicit rule violations.</div>
+    <div class="gap"></div>
+    <label class="fld">Spreadsheet (.xlsx)</label>
+    <div id="drop"><b>Drop your .xlsx here</b><br>or click to choose<div id="fname" style="margin-top:6px"></div></div>
+    <input type="file" id="file" accept=".xlsx" style="display:none" />
+    <div class="gap"></div>
+    <button class="go" id="go" disabled>Review spreadsheet</button>
+  </div>
+
+  <div class="card" id="result" style="display:none">
+    <div id="status" class="statline"></div>
+    <div class="prog"><i id="bar"></i></div>
+    <div class="chips" id="chips"></div>
+    <div id="cols" class="muted"></div>
+    <div id="dlwrap"></div>
+    <div id="error" class="err"></div>
+  </div>
+</div>
+
+<script>
+let file = null, mode = "normal", poll = null;
+const $ = (id) => document.getElementById(id);
+
+fetch("/clients").then(r => r.json()).then(d => {
+  const sel = $("client");
+  sel.innerHTML = (d.clients || []).map(c => `<option>${c}</option>`).join("") || "<option>(none)</option>";
+}).catch(() => { $("client").innerHTML = "<option>helper offline?</option>"; });
+
+$("mode").addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  mode = b.dataset.m;
+  [...$("mode").children].forEach(x => x.classList.toggle("on", x === b));
+  $("modehint").textContent = mode === "strict"
+    ? "Strict — also flags implied / borderline “could be read as” risks."
+    : "Normal — flags only direct, explicit rule violations.";
+});
+
+const drop = $("drop"), input = $("file");
+drop.onclick = () => input.click();
+input.onchange = () => setFile(input.files[0]);
+["dragover", "dragenter"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("hover"); }));
+["dragleave", "drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("hover"); }));
+drop.addEventListener("drop", e => setFile(e.dataTransfer.files[0]));
+
+function setFile(f) {
+  if (!f || !f.name.toLowerCase().endsWith(".xlsx")) { $("fname").textContent = "Please choose a .xlsx file."; return; }
+  file = f; $("fname").textContent = f.name; $("go").disabled = false;
+}
+
+$("go").onclick = async () => {
+  if (!file) return;
+  $("go").disabled = true; $("result").style.display = "block";
+  $("error").textContent = ""; $("dlwrap").innerHTML = ""; $("chips").innerHTML = ""; $("cols").textContent = "";
+  $("bar").style.width = "0%"; $("status").textContent = "Uploading & reading the sheet…";
+  const fd = new FormData();
+  fd.append("file", file); fd.append("client", $("client").value); fd.append("mode", mode);
+  let job;
+  try {
+    const r = await fetch("/review-xlsx", { method: "POST", body: fd });
+    if (!r.ok) throw new Error((await r.json()).detail || ("HTTP " + r.status));
+    job = await r.json();
+  } catch (e) { fail(e.message); return; }
+  $("status").textContent = `Found ${job.total} “To Review” row(s). Checking…`;
+  poll = setInterval(() => checkStatus(job.job_id), 2500);
+};
+
+async function checkStatus(id) {
+  let s;
+  try { s = await (await fetch("/review-xlsx/status/" + id)).json(); } catch { return; }
+  const pct = s.total ? Math.round(s.done / s.total * 100) : 0;
+  $("bar").style.width = pct + "%";
+  if (s.status === "running") { $("status").textContent = `Checking ad ${s.done} / ${s.total}…`; return; }
+  clearInterval(poll);
+  if (s.status === "error") { fail(s.error || "review failed"); return; }
+  const x = s.summary || {};
+  $("status").textContent = `Done — reviewed ${x.total} row(s).`;
+  $("chips").innerHTML =
+    `<span class="chip go">${x.good||0} good</span><span class="chip minor">${x.minor||0} minor</span>` +
+    `<span class="chip major">${x.major||0} major</span>` + (x.error ? `<span class="chip err">${x.error} error</span>` : "");
+  if (x.columns) $("cols").textContent = `Sheet “${x.sheet}” · image col ${x.columns.image} · status col ${x.columns.status} · wrote feedback to col ${x.columns.feedback}`;
+  $("dlwrap").innerHTML = `<a class="dl" href="/review-xlsx/download/${id}" download>⤓ Download reviewed .xlsx</a>`;
+  $("go").disabled = false;
+}
+
+function fail(msg) {
+  if (poll) clearInterval(poll);
+  $("status").textContent = ""; $("error").textContent = "Error: " + msg; $("go").disabled = false;
+}
+</script>
+</body>
+</html>

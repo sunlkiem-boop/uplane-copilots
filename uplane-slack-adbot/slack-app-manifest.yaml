@@ -1,0 +1,33 @@
+display_information:
+  name: Uplane Ad-Bot
+  description: Drop a static creative, set a direction, and it generates Uplane ad concepts.
+  background_color: "#1a1a1a"
+features:
+  bot_user:
+    display_name: Uplane Ad-Bot
+    always_online: true
+oauth_config:
+  scopes:
+    bot:
+      - app_mentions:read
+      - channels:history
+      - groups:history
+      - im:history
+      - mpim:history
+      - chat:write
+      - files:read
+      - files:write
+      - commands
+settings:
+  event_subscriptions:
+    bot_events:
+      - app_mention
+      - message.channels
+      - message.groups
+      - message.im
+      - message.mpim
+  interactivity:
+    is_enabled: true
+  socket_mode_enabled: true
+  org_deploy_enabled: false
+  token_rotation_enabled: false

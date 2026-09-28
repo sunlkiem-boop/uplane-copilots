@@ -1,0 +1,77 @@
+{
+  "_comment": "Your copilots/agents. Add a tool by copying a block. type=server gets Start/Stop/Open + a live status dot; type=chrome opens a chrome:// or web page in Chrome; type=info is just a label.",
+  "memory": {
+    "_comment": "Cross-copilot client memory lives here \u2014 the shared-learnings the copilots/agents write as they work. The control room surfaces it per client; a richer per-client view is a later feature (this just reserves the room).",
+    "clients_dir": "~/Desktop/uplane/clients",
+    "learnings_csv": "~/Desktop/uplane/shared-learnings.csv"
+  },
+  "tools": [
+    {
+      "name": "Compliance Copilot",
+      "type": "server",
+      "dir": "~/Desktop/copilots/uplane-compliance-copilot/server",
+      "start": "./run.sh",
+      "port": 8787,
+      "url": "http://localhost:8787"
+    },
+    {
+      "name": "Creative Studio",
+      "type": "server",
+      "dir": "~/Desktop/copilots/uplane-creative-studio/helper",
+      "start": "./run.sh",
+      "port": 8788,
+      "url": "http://127.0.0.1:8788"
+    },
+    {
+      "name": "Video Lab",
+      "type": "server",
+      "dir": "~/Desktop/copilots/uplane-video-lab/helper",
+      "start": "./run.sh",
+      "port": 8789,
+      "url": "http://127.0.0.1:8789"
+    },
+    {
+      "name": "Ads Scraper",
+      "type": "info",
+      "dir": "~/Desktop/copilots/uplane-ads-scraper-meta",
+      "note": "Runs inside Claude Code (scrape-meta-ads skill) \u2014 no local server to open. Invoke it in a Claude Code session."
+    },
+    {
+      "name": "Slack Ad-Bot",
+      "type": "server",
+      "dir": "~/Desktop/copilots/uplane-slack-adbot/helper",
+      "start": "./run.sh",
+      "port": 8790,
+      "url": "http://127.0.0.1:8790/health"
+    },
+    {
+      "name": "Edit Capture",
+      "type": "server",
+      "dir": "~/Desktop/copilots/uplane-edit-capture/helper",
+      "start": "./run.sh",
+      "port": 8791,
+      "url": "http://127.0.0.1:8791/health",
+      "_comment": "Logs what you fix in the Uplane editor (and why) into the context graph. Pair with the uplane-edit-capture Chrome extension."
+    },
+    {
+      "name": "Daily Digest",
+      "type": "info",
+      "dir": "~/Desktop/copilots/uplane-daily-digest",
+      "note": "Its own Slack app. No port \u2014 a weekday 08:00 job plus a Socket Mode chat listener, both supervised by the SwiftBar 'Daily Digest' menu item (launchd can't read ~/Desktop). DM the bot to add/change/drop items. Dry run: ./run.sh | Post now: ./run.sh --post | Chat: ./run.sh --bot | Wiring: ./run.sh --health"
+    },
+    {
+      "name": "Atlas",
+      "type": "server",
+      "dir": "~/Desktop/copilots/uplane-atlas/helper",
+      "start": "./run.sh",
+      "port": 8792,
+      "url": "http://127.0.0.1:8792"
+    },
+    {
+      "name": "Demo Agent",
+      "type": "info",
+      "dir": "~/Desktop/copilots/uplane-demo-agent",
+      "note": "Its own Slack app + own Claude login (~/.claude-demo). No port \u2014 a Socket Mode DM bot supervised by the SwiftBar 'Demo Agent' item. Stage-gated demo pipeline: DM it `help`. Setup: SETUP.md (3 manual steps). Probes: ./run.sh --probes | Listener: ./run.sh --bot"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+python-dotenv
+python-multipart
+playwright
+playwright-stealth
+imageio-ffmpeg
+pypdf
+faster-whisper
+opencv-python-headless<5

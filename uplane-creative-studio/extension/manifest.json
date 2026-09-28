@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "Uplane Creative Studio — Meta pull",
+  "version": "0.1.0",
+  "description": "Pulls each ad's creative thumbnail from Meta Ads Manager and sends it to the Creative Studio helper, matched by ad name.",
+  "permissions": ["storage", "tabs"],
+  "host_permissions": [
+    "http://127.0.0.1:8788/*",
+    "http://localhost:8788/*",
+    "https://adsmanager.facebook.com/*",
+    "https://business.facebook.com/*",
+    "<all_urls>"
+  ],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_title": "Uplane Creative Studio — Meta pull" },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://adsmanager.facebook.com/*",
+        "https://business.facebook.com/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

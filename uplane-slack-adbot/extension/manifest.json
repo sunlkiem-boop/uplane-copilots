@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "Uplane Slack Ad-Bot Driver",
+  "version": "0.1.0",
+  "description": "Drives the Uplane concept board on behalf of the Slack Ad-Bot: uploads a creative, sets the prompt + count, generates, and reports previews back.",
+  "permissions": ["storage", "tabs", "scripting", "alarms", "declarativeNetRequestWithHostAccess"],
+  "host_permissions": [
+    "http://127.0.0.1:8790/*",
+    "http://localhost:8790/*",
+    "https://app.uplane.com/*",
+    "https://cdn.uplane.com/*",
+    "https://utfs.io/*",
+    "https://*.ufs.sh/*"
+  ],
+  "background": { "service_worker": "background.js" },
+  "action": {
+    "default_title": "Uplane Slack Ad-Bot Driver",
+    "default_icon": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" }
+  },
+  "icons": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
+  "content_scripts": [
+    {
+      "matches": ["https://app.uplane.com/concepts/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

@@ -1,0 +1,590 @@
+#!/usr/bin/env python3
+"""Uplane Atlas — the living map of the Uplane stack (:8792).
+
+A canvas for the data flows and information architecture of the copilot stack, plus a
+trajectory view of what the agents actually did. Sun, 2026-08-25: "visualizes, in a
+no-code simple way, the data flows … see the trajectory of agents … add/drop/modify
+elements or comment … locally hosted, synced to the local desktop."
+
+v1.1 after the /autoplan review (PLAN.md carries the findings and audit trail):
+
+- HYBRID MAP TRUTH (D1): copilot/server nodes are reconciled against Control Room's
+  copilots.json — the authoritative registry — and unregistered copilot folders on
+  disk. Atlas reports drift ("Minerva is not on your map"); edges, annotations,
+  layout and non-server nodes stay fully hand-editable.
+- HONEST HEALTH (T-A, all four review voices): a green dot no longer means "TCP
+  accepted". Per node: an actual /health round-trip (classified ok / hung / down),
+  self-reported state passed through (the Ad-Bot says driver_alive:false — show it),
+  and last-activity freshness from each agent's real data trail. Verified live during
+  review: :8790 was green while its driver had been dead 9.6 hours.
+- DATA SAFETY (T-B): corrupt atlas.json is an ERROR, never an empty map — the old
+  code loaded a bad hand-edit as version 0, let the open tab sync to blank, then
+  rotated the corrupt file over the only good backup on the next save. Corrupt files
+  are refused, never rotated into backups, and backups keep 3 dated slots.
+- One process-wide write lock: /api/comment used to race the map autosave and
+  silently revert map edits under a reused version number.
+
+Stdlib only. Read-only against graph.db (WAL, so readers never block the writers).
+Errors are {error, cause, fix}. The document format is served at GET /api/schema and
+embedded in the doc's own "_schema" key.
+"""
+import json
+import os
+import re
+import socket
+import sqlite3
+import sys
+import threading
+import time
+import urllib.request
+from concurrent.futures import ThreadPoolExecutor
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+PORT = int(os.environ.get("ATLAS_PORT", "8792"))
+HERE = os.path.dirname(os.path.abspath(__file__))
+UI = os.path.join(HERE, "..", "ui")
+SEED = os.path.join(HERE, "..", "seed", "atlas.json")
+DOC = os.path.expanduser("~/Desktop/uplane/architecture/atlas.json")
+GRAPH_DB = os.path.expanduser("~/Desktop/uplane/context-graph/graph.db")
+COPILOTS_JSON = os.path.expanduser("~/Desktop/copilots/control-room/copilots.json")
+COPILOTS_DIR = os.path.expanduser("~/Desktop/copilots")
+ADBOT_LOG = os.path.expanduser("~/Desktop/copilots/uplane-slack-adbot/helper/logs/jobs.jsonl")
+
+# One lock for every load-mutate-save. ThreadingHTTPServer handles each request on
+# its own thread; without this, /api/comment (which carries no baseVersion) raced the
+# UI's 700ms autosave: both read v5, map POST wrote v6 with new nodes, comment POST
+# wrote v6 again with STALE nodes — the map edit silently gone, version reused so no
+# tab even saw a conflict.
+WRITE_LOCK = threading.Lock()
+
+SCHEMA = {
+    "doc": "~/Desktop/uplane/architecture/atlas.json — the whole map. Agents may edit "
+           "it directly; the open browser tab picks changes up within ~3s.",
+    "rules": [
+        "ANY direct file edit MUST increment the top-level integer `version`, or the "
+        "next UI autosave will silently overwrite your change.",
+        "POST /api/map REPLACES the whole document: send baseVersion (the version you "
+        "read) plus FULL nodes and edges arrays. A stale baseVersion returns 409 with "
+        "the current doc — re-read, rebase, retry.",
+        "Unknown top-level keys are preserved verbatim.",
+    ],
+    "node": {"id": "string, unique, required", "type": "copilot|extension|store|external|skill|client|note",
+             "label": "string", "sub": "string subtitle", "x": "number", "y": "number",
+             "port": "int, optional — enables the live-health dot",
+             "trail": "string, optional — key of an activity trail (see /api/live trails)",
+             "note": "string, optional", "derived": "bool — true when reconciled from copilots.json"},
+    "edge": {"id": "string", "from": "node id", "to": "node id", "label": "what flows"},
+    "group": {"id": "string", "label": "string", "x": "number", "y": "number",
+              "collapsed": "bool — the L0 view shows one card per group with rollup "
+                           "health; nodes carry group: '<group id>'"},
+    "comment": {"id": "string", "target": "node id or trajectory item id", "kind": "node|trajectory",
+                "by": "string", "at": "ISO time", "text": "string"},
+    "endpoints": {"GET /api/map": "the doc (+_mtime)", "POST /api/map": "full replace, see rules",
+                  "GET /api/live": "per-node health + freshness + drift",
+                  "GET /api/trajectories": "recent agent activity",
+                  "POST /api/comment": "{target, kind, text[, by]}",
+                  "POST /api/comment/delete": "{id}", "GET /api/schema": "this object"},
+}
+
+
+def err(cause, fix, error="request failed"):
+    return {"error": error, "cause": cause, "fix": fix}
+
+
+class CorruptDoc(Exception):
+    pass
+
+
+def load_doc():
+    """Missing file = a legitimate empty map. Corrupt file = an ERROR the caller must
+    surface — returning an empty doc here is how the old code destroyed the map."""
+    try:
+        with open(DOC) as f:
+            raw = f.read()
+    except FileNotFoundError:
+        return {"version": 0, "nodes": [], "edges": [], "comments": []}
+    try:
+        return json.loads(raw)
+    except ValueError as e:
+        raise CorruptDoc(str(e))
+
+
+def save_doc(doc):
+    """Atomic write + 3 dated backup slots. A file that does not parse is NEVER
+    rotated into a backup — that rule is what makes a bad hand-edit recoverable."""
+    os.makedirs(os.path.dirname(DOC), exist_ok=True)
+    doc["_schema"] = "GET http://127.0.0.1:%d/api/schema — direct edits must bump `version`" % PORT
+    tmp = DOC + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(doc, f, indent=1)
+    if os.path.exists(DOC):
+        try:
+            json.load(open(DOC))          # only a parsing file earns a backup slot
+            for i in (2, 1):
+                src = DOC + (".bak" if i == 1 else f".bak{i}")
+                dst = DOC + f".bak{i + 1}"
+                if os.path.exists(src):
+                    os.replace(src, dst)
+            with open(DOC, "rb") as a, open(DOC + ".bak", "wb") as b:
+                b.write(a.read())          # copy, not rename: no crash window with DOC absent
+        except ValueError:
+            pass
+    os.replace(tmp, DOC)
+
+
+# ---------------------------------------------------------------- health + freshness
+def _norm_ts(s):
+    """Best-effort normalisation so items from four sources sort together."""
+    s = str(s or "").strip().replace(" ", "T")
+    return s[:19]
+
+
+def registry():
+    """Control Room's copilots.json is the authoritative server list."""
+    try:
+        d = json.load(open(COPILOTS_JSON))
+        return [t for t in d.get("tools", []) if isinstance(t, dict)]
+    except (OSError, ValueError):
+        return []
+
+
+def probe_health(port):
+    """TCP alone lies (verified: the Ad-Bot accepted connections for 9.6 hours with a
+    dead driver). Classify by an actual /health round-trip and pass the payload
+    through so self-reported failures reach the UI."""
+    out = {"state": "down", "detail": ""}
+    s = socket.socket()
+    s.settimeout(0.3)
+    try:
+        if s.connect_ex(("127.0.0.1", port)) != 0:
+            return out
+    finally:
+        s.close()
+    try:
+        # 2.5s, not 0.8: the Ad-Bot's /health does real work (driver checks) and
+        # answered in ~1-2s under load — classifying a slow-but-honest helper as
+        # "hung" would undermine the exact trust this probe exists to build.
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=2.5) as f:
+            body = f.read(2000)
+        try:
+            j = json.loads(body)
+            bad = [k for k, v in j.items() if isinstance(v, bool) and not v and
+                   k not in ("ok",)] + (["ok"] if j.get("ok") is False else [])
+            if bad:
+                out.update(state="degraded", detail=", ".join(f"{k}=false" for k in bad), health=j)
+            else:
+                out.update(state="ok", health=j)
+        except ValueError:
+            out.update(state="ok", detail="non-JSON /health")
+    except Exception:
+        # accepts TCP but /health did not answer — a hung or foreign process
+        out.update(state="hung", detail="port accepts connections but /health does not answer")
+    return out
+
+
+def _mtime_iso(path):
+    try:
+        return time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(os.path.getmtime(path)))
+    except OSError:
+        return None
+
+
+def _newest_in(dirpath):
+    try:
+        ts = max((os.path.getmtime(os.path.join(dirpath, f)) for f in os.listdir(dirpath)), default=None)
+        return time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(ts)) if ts else None
+    except OSError:
+        return None
+
+
+def activity_trails():
+    """When did each agent last actually DO something. These are the trails verified
+    to exist during review; a trail the code cannot read reports its error in-band
+    instead of masquerading as 'no activity'."""
+    trails, errors = {}, {}
+    try:
+        db = sqlite3.connect(f"file:{GRAPH_DB}?mode=ro", uri=True, timeout=2)
+        try:
+            for key, q in (("adbot", "SELECT MAX(at) FROM generation_attempt"),
+                           ("ecap", "SELECT MAX(COALESCE(at,'')) FROM edit_event"),
+                           ("ecap-frames", "SELECT MAX(at) FROM edit_frame"),
+                           ("feedback", "SELECT MAX(at) FROM feedback"),
+                           ("graph", "SELECT MAX(m) FROM (SELECT MAX(at) m FROM generation_attempt "
+                                     "UNION SELECT MAX(at) FROM edit_event UNION SELECT MAX(at) FROM feedback)")):
+                try:
+                    trails[key] = db.execute(q).fetchone()[0]
+                except sqlite3.Error as e:
+                    errors[key] = str(e)
+        finally:
+            db.close()
+    except sqlite3.Error as e:
+        errors["graph.db"] = str(e)
+    trails["ecap"] = trails.get("ecap") or trails.get("ecap-frames")
+    trails.pop("ecap-frames", None)
+    trails["jobs"] = _mtime_iso(ADBOT_LOG)
+    trails["digest"] = _mtime_iso(os.path.expanduser(
+        "~/Desktop/copilots/uplane-daily-digest/data/state.json"))
+    trails["learn"] = _mtime_iso(os.path.expanduser("~/Desktop/uplane/shared-learnings.csv"))
+    trails["scraper"] = _newest_in(os.path.expanduser(
+        "~/Desktop/copilots/uplane-ads-scraper-meta/reports"))
+    trails["vlab"] = _newest_in(os.path.expanduser(
+        "~/Desktop/copilots/uplane-video-lab/helper/data"))
+    trails["atlasdoc"] = _mtime_iso(DOC)
+    return {k: v for k, v in trails.items() if v}, errors
+
+
+def drift(doc):
+    """The map versus reality. Verified during review: minerva-inquiry-copilot existed
+    on disk, absent from the map, on day 1."""
+    nodes = doc.get("nodes", [])
+    mapped_ports = {n.get("port") for n in nodes if n.get("port")}
+
+    # Normalise BOTH sides before comparing. The raw-substring test failed to see
+    # that "uplane-demo-agent" (a node the Add button had just created) matched the
+    # folder "uplane-demo-agent" pretty-printed as "demo agent" — so the drift banner
+    # kept re-offering folders that were already on the map, and every Add click
+    # duplicated them (12 derived nodes for 4 folders on the live doc).
+    def norm(s):
+        s = str(s or "").lower().replace("uplane-", "").replace("-", " ").replace("_", " ")
+        return " ".join(s.split())
+    mapped_labels = {norm(n.get("label")) for n in nodes if n.get("label")}
+
+    def on_map(name):
+        n = norm(name)
+        return any(n == l or n in l or l in n for l in mapped_labels if l)
+    unmapped = []
+    for t in registry():
+        name = t.get("name", "")
+        p = t.get("port")
+        if p and p not in mapped_ports and not on_map(name):
+            unmapped.append({"name": name, "port": p, "why": "in copilots.json, not on the map"})
+        elif not p and t.get("type") == "info" and not on_map(name):
+            unmapped.append({"name": name, "port": None, "why": "in copilots.json, not on the map"})
+    known_dirs = {"control-room"}
+    try:
+        for d in os.listdir(COPILOTS_DIR):
+            full = os.path.join(COPILOTS_DIR, d)
+            if not os.path.isdir(full) or d.startswith(".") or d in known_dirs:
+                continue
+            if not on_map(d):
+                unmapped.append({"name": d, "port": None,
+                                 "why": "copilot folder on disk, not on the map"})
+    except OSError:
+        pass
+    reg_ports = {t.get("port") for t in registry() if t.get("port")}
+    gone = [{"id": n["id"], "label": n.get("label", ""), "port": n["port"]}
+            for n in nodes if n.get("type") == "copilot" and n.get("port")
+            and n["port"] not in reg_ports]
+    return {"unmapped": unmapped, "gone": gone}
+
+
+def live_status():
+    try:
+        doc = load_doc()
+    except CorruptDoc as e:
+        return {"docError": err(f"atlas.json is not valid JSON: {e}",
+                                "repair the file or restore atlas.json.bak")["cause"],
+                "nodes": {}, "trails": {}, "drift": {"unmapped": [], "gone": []}}
+    def as_port(v):
+        # the doc is hand/agent-editable: a string or junk port must degrade to
+        # "not probed", never crash the whole live endpoint (mixed-type sort did)
+        try:
+            p = int(v)
+            return p if 1 <= p <= 65535 else None
+        except (TypeError, ValueError):
+            return None
+    ports = sorted({p for p in (as_port(n.get("port")) for n in doc.get("nodes", [])) if p}
+                   | {p for p in (as_port(t.get("port")) for t in registry()) if p})
+    with ThreadPoolExecutor(max_workers=8) as ex:      # serial probes cost 1.5s when helpers are down
+        results = dict(zip(ports, ex.map(probe_health, ports)))
+    trails, trail_errors = activity_trails()
+    out = {"nodes": {str(p): results[p] for p in ports},
+           "trails": trails, "drift": drift(doc), "at": time.strftime("%Y-%m-%dT%H:%M:%S")}
+    if trail_errors:
+        out["trailErrors"] = trail_errors
+    counts = {}
+    try:
+        db = sqlite3.connect(f"file:{GRAPH_DB}?mode=ro", uri=True, timeout=2)
+        try:
+            for t in ("rule", "generation_attempt", "edit_event", "feedback",
+                      "prompt_block", "creative", "client"):
+                try:
+                    counts[t] = db.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
+                except sqlite3.Error:
+                    counts[t] = None
+        finally:
+            db.close()
+        out["graph"] = counts
+    except sqlite3.Error as e:
+        out["graphError"] = str(e)
+    return out
+
+
+# ---------------------------------------------------------------- trajectories
+NOISE_EVENTS = {"poll"}      # connectivity failures are SIGNAL, not noise — see below
+
+
+def trajectories(limit=250):
+    """Recent agent activity, newest first. Every source reports its own failure
+    in-band ('sources') — a dead graph.db must never render as a quiet day. The old
+    code proved why: its feedback query referenced a column that does not exist and
+    the blanket except hid that for its whole life."""
+    items, sources = [], {}
+    try:
+        db = sqlite3.connect(f"file:{GRAPH_DB}?mode=ro", uri=True, timeout=2)
+        db.row_factory = sqlite3.Row
+        try:
+            try:
+                for r in db.execute("""
+                    SELECT a.id, a.at, a.model, a.operator, a.rating, a.defect,
+                           cl.name AS client
+                    FROM generation_attempt a
+                    LEFT JOIN creative c ON c.id = a.creative_id
+                    LEFT JOIN product p ON p.id = c.product_id
+                    LEFT JOIN client cl ON cl.id = p.client_id
+                    ORDER BY a.at DESC LIMIT ?""", (limit,)):
+                    items.append({"id": "att:" + r["id"], "at": _norm_ts(r["at"]),
+                                  "agent": r["operator"] or "ad-bot", "kind": "generation",
+                                  "node": "adbot",
+                                  "title": f"generated via {r['model'] or '?'}",
+                                  "detail": (f"rating: {r['rating']}" if r["rating"] else "unrated")
+                                            + (f" · defect: {r['defect']}" if r["defect"] else ""),
+                                  "client": r["client"] or ""})
+                sources["generation_attempt"] = "ok"
+            except sqlite3.Error as e:
+                sources["generation_attempt"] = str(e)
+                print(f"[atlas] generation_attempt query failed: {e}", file=sys.stderr)
+            try:
+                for r in db.execute("""
+                    SELECT id, at, action, element, why, by, ai_note, board_url
+                    FROM edit_event ORDER BY at DESC LIMIT ?""", (limit,)):
+                    items.append({"id": "ee:" + r["id"], "at": _norm_ts(r["at"]),
+                                  "agent": r["by"] or "sun", "kind": "edit", "node": "ecap",
+                                  "title": f"{r['action'] or 'edit'} · {r['element'] or 'creative'}",
+                                  "detail": (r["why"] or r["ai_note"] or "")[:220],
+                                  "url": r["board_url"] or "", "client": ""})
+                sources["edit_event"] = "ok"
+            except sqlite3.Error as e:
+                sources["edit_event"] = str(e)
+                print(f"[atlas] edit_event query failed: {e}", file=sys.stderr)
+            try:
+                # schema: person_id/source — there is no `by` column (shipped bug, review F2)
+                for r in db.execute("""
+                    SELECT id, at, verdict, aspect, note,
+                           COALESCE(person_id, source, '') AS who
+                    FROM feedback ORDER BY at DESC LIMIT ?""", (limit,)):
+                    items.append({"id": "fb:" + r["id"], "at": _norm_ts(r["at"]),
+                                  "agent": r["who"], "kind": "verdict", "node": "graph",
+                                  "title": f"{r['verdict'] or 'feedback'} · {r['aspect'] or ''}",
+                                  "detail": (r["note"] or "")[:220], "client": ""})
+                sources["feedback"] = "ok"
+            except sqlite3.Error as e:
+                sources["feedback"] = str(e)
+                print(f"[atlas] feedback query failed: {e}", file=sys.stderr)
+        finally:
+            db.close()
+    except sqlite3.Error as e:
+        sources["graph.db"] = str(e)
+    try:
+        size = os.path.getsize(ADBOT_LOG)
+        window = 300_000
+        with open(ADBOT_LOG, "rb") as f:
+            f.seek(max(0, size - window))
+            lines = f.read().decode(errors="replace").splitlines()
+        if size > window:
+            lines = lines[1:]              # only then is the first line a partial
+        for i, ln in enumerate(lines[-limit:]):
+            try:
+                j = json.loads(ln)
+            except ValueError:
+                continue
+            ev = str(j.get("event") or "")
+            if ev in NOISE_EVENTS:
+                continue
+            kind = "outage" if ("disconnect" in ev or "failed" in ev or "error" in ev) else "job"
+            items.append({"id": f"job:{j.get('ts','')}:{i}:{ev}",
+                          "at": _norm_ts(j.get("ts")), "agent": "ad-bot",
+                          "kind": kind, "node": "adbot", "title": ev,
+                          "detail": str(j.get("client") or j.get("job") or
+                                        j.get("error") or "")[:220],
+                          "client": str(j.get("client") or "")})
+        sources["jobs.jsonl"] = "ok"
+    except OSError as e:
+        sources["jobs.jsonl"] = str(e)
+    items.sort(key=lambda i: i["at"], reverse=True)
+    return {"items": items[:limit], "sources": sources}
+
+
+# ---------------------------------------------------------------- http
+class H(BaseHTTPRequestHandler):
+    def log_message(self, *a):
+        pass
+
+    def _send(self, code, body, ctype="application/json"):
+        raw = body if isinstance(body, bytes) else json.dumps(body).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(raw)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(raw)
+
+    def _guard(self):
+        """Localhost bind is necessary, not sufficient: any web page can fire a
+        no-preflight POST at 127.0.0.1. Requiring JSON Content-Type kills simple-
+        request CSRF; the Host check kills DNS rebinding."""
+        host = (self.headers.get("Host") or "").split(":")[0]
+        if host not in ("127.0.0.1", "localhost"):
+            self._send(403, err(f"unexpected Host {host!r}", "open Atlas via http://127.0.0.1:%d" % PORT))
+            return False
+        if self.command == "POST":
+            ct = (self.headers.get("Content-Type") or "").split(";")[0].strip()
+            if ct != "application/json":
+                self._send(415, err(f"Content-Type {ct!r}", "send application/json"))
+                return False
+        return True
+
+    def do_GET(self):
+        if not self._guard():
+            return
+        path = self.path.split("?")[0]
+        if path in ("/", "/index.html"):
+            with open(os.path.join(UI, "index.html"), "rb") as f:
+                return self._send(200, f.read(), "text/html; charset=utf-8")
+        if path == "/health":
+            return self._send(200, {"ok": True, "service": "uplane-atlas"})
+        if path == "/api/schema":
+            return self._send(200, SCHEMA)
+        if path == "/api/map":
+            try:
+                doc = load_doc()
+            except CorruptDoc as e:
+                return self._send(503, err(f"atlas.json is not valid JSON: {e}",
+                                           "fix the syntax error, or restore a backup: "
+                                           "cp atlas.json.bak atlas.json (slots .bak/.bak2/.bak3)",
+                                           "map unreadable"))
+            try:
+                doc["_mtime"] = os.path.getmtime(DOC)
+            except OSError:
+                doc["_mtime"] = 0
+            return self._send(200, doc)
+        if path == "/api/live":
+            return self._send(200, live_status())
+        if path == "/api/trajectories":
+            return self._send(200, trajectories())
+        return self._send(404, err(f"no route {path}", "see GET /api/schema"))
+
+    def do_POST(self):
+        if not self._guard():
+            return
+        n = int(self.headers.get("Content-Length", 0) or 0)
+        if n > 8_000_000:
+            return self._send(400, err("body over 8MB", "send less"))
+        try:
+            payload = json.loads(self.rfile.read(n) or b"{}")
+        except ValueError:
+            return self._send(400, err("body is not valid JSON", "send a JSON object"))
+        path = self.path.split("?")[0]
+        with WRITE_LOCK:
+            if path == "/api/map":
+                return self._post_map(payload)
+            if path == "/api/comment":
+                return self._post_comment(payload)
+            if path == "/api/comment/delete":
+                return self._post_comment_delete(payload)
+        return self._send(404, err(f"no route {path}", "see GET /api/schema"))
+
+    def _post_map(self, payload):
+        try:
+            doc = load_doc()
+        except CorruptDoc as e:
+            return self._send(503, err(f"atlas.json is not valid JSON: {e}",
+                                       "repair it or restore a .bak before saving — refusing "
+                                       "to overwrite so the damage stays recoverable",
+                                       "map unreadable"))
+        # Full replace, and it SAYS so: an agent that models this as a patch endpoint
+        # ("just POST the comments") must get a 400, not a 200 that wiped the map.
+        if not isinstance(payload.get("nodes"), list) or not isinstance(payload.get("edges"), list):
+            return self._send(400, err(
+                "nodes and edges are both required arrays",
+                "POST /api/map replaces the WHOLE document: GET /api/map, modify, POST "
+                "back everything with baseVersion"))
+        if int(payload.get("baseVersion", -1)) != int(doc.get("version", 0)):
+            cur = dict(doc)
+            return self._send(409, {**err(
+                f"baseVersion {payload.get('baseVersion')} != current {doc.get('version', 0)}",
+                "re-read the returned doc, rebase your change, retry", "stale"),
+                "version": doc.get("version", 0), "doc": cur})
+        for nd in payload["nodes"]:
+            if not isinstance(nd, dict) or not str(nd.get("id") or "").strip():
+                return self._send(400, err("a node is missing its id", "every node needs a unique string id"))
+            for k in ("x", "y"):
+                v = nd.get(k)
+                if not isinstance(v, (int, float)) or v != v:   # NaN check: one coordinate-less
+                    nd[k] = 0                                    # node used to blank the whole canvas
+        extras = {k: v for k, v in doc.items()
+                  if k not in ("version", "nodes", "edges", "comments", "groups",
+                               "_mtime", "_schema")}
+        new = {**extras, "version": int(doc.get("version", 0)) + 1,
+               "nodes": payload["nodes"], "edges": payload["edges"],
+               "groups": payload.get("groups", doc.get("groups") or []),
+               "comments": payload.get("comments", doc.get("comments") or [])}
+        save_doc(new)
+        return self._send(200, {"ok": True, "version": new["version"]})
+
+    def _post_comment(self, payload):
+        target = str(payload.get("target") or "").strip()
+        text = str(payload.get("text") or "").strip()
+        if not target or not text:
+            return self._send(400, err("need target and text", "POST {target, kind, text}"))
+        try:
+            doc = load_doc()
+        except CorruptDoc as e:
+            return self._send(503, err(f"atlas.json is not valid JSON: {e}",
+                                       "repair or restore a .bak first", "map unreadable"))
+        doc.setdefault("comments", []).append({
+            "id": "c" + str(int(time.time() * 1000)),
+            "target": target[:200], "kind": str(payload.get("kind") or "node")[:20],
+            "by": str(payload.get("by") or "sun")[:40],
+            "at": time.strftime("%Y-%m-%dT%H:%M:%S"), "text": text[:2000]})
+        doc["version"] = int(doc.get("version", 0)) + 1
+        doc.pop("_mtime", None)
+        save_doc(doc)
+        return self._send(200, {"ok": True, "version": doc["version"]})
+
+    def _post_comment_delete(self, payload):
+        cid = str(payload.get("id") or "")
+        try:
+            doc = load_doc()
+        except CorruptDoc as e:
+            return self._send(503, err(f"atlas.json is not valid JSON: {e}",
+                                       "repair or restore a .bak first", "map unreadable"))
+        before = len(doc.get("comments") or [])
+        doc["comments"] = [c for c in doc.get("comments") or [] if c.get("id") != cid]
+        if len(doc["comments"]) != before:
+            doc["version"] = int(doc.get("version", 0)) + 1
+            doc.pop("_mtime", None)
+            save_doc(doc)
+        return self._send(200, {"ok": True, "removed": before - len(doc["comments"])})
+
+
+def main():
+    os.makedirs(os.path.dirname(DOC), exist_ok=True)
+    if not os.path.exists(DOC) and os.path.exists(SEED):
+        with open(SEED, "rb") as a, open(DOC, "wb") as b:
+            b.write(a.read())
+        print(f"seeded {DOC} from {SEED}")
+    try:
+        srv = ThreadingHTTPServer(("127.0.0.1", PORT), H)   # bind FIRST — the old code
+    except OSError as e:                                     # printed success, then died
+        print(f"Cannot start Uplane Atlas: port {PORT} is already in use ({e}).\n"
+              f"Something else owns it — check: lsof -i :{PORT}\n"
+              f"Fix: stop that process, or run with ATLAS_PORT=<other> ./run.sh",
+              file=sys.stderr)
+        sys.exit(1)
+    print(f"Uplane Atlas on http://127.0.0.1:{PORT}   map: {DOC}")
+    srv.serve_forever()
+
+
+if __name__ == "__main__":
+    main()

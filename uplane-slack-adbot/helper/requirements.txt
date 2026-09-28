@@ -1,0 +1,8 @@
+flask>=3.0
+requests>=2.31
+slack-bolt>=1.18
+python-dotenv>=1.0
+pillow>=10.0        # compose a batch of concepts into one grid image
+# anthropic is only needed if you set ANTHROPIC_API_KEY (LLM_BACKEND=api);
+# the default CLI backend uses your logged-in `claude` command.
+anthropic>=0.39

@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Uplane — Notes & Memory</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  body { margin: 0; background: #0b0d12; color: #e8eaed; display: flex; justify-content: center; padding: 36px 16px 60px; }
+  .wrap { width: 100%; max-width: 620px; }
+  h1 { font-size: 20px; margin: 0 0 2px; display: flex; align-items: center; gap: 9px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: #4b9eff; box-shadow: 0 0 9px #4b9eff; }
+  .sub { color: #8b93a3; font-size: 13px; margin: 0 0 18px; }
+  .sub a { color: #7db1ff; text-decoration: none; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .7px; color: #8b93a3; margin: 22px 0 9px; }
+  .card { background: #0f1115; border: 1px solid #2a2f3a; border-radius: 13px; padding: 16px; }
+  label.fld { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: #8b93a3; margin: 0 0 6px; }
+  select, input, textarea { width: 100%; padding: 10px; background: #1b2030; color: #e8eaed; border: 1px solid #2c3344; border-radius: 9px; font-size: 14px; font-family: inherit; }
+  textarea { min-height: 92px; resize: vertical; }
+  .row { display: flex; gap: 10px; } .row > * { flex: 1; }
+  .gap { height: 13px; }
+  .seg { display: flex; gap: 7px; }
+  .seg button { flex: 1; padding: 9px 6px; border-radius: 9px; border: 1px solid #2c3344; background: #1b2030; color: #cdd3df; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .seg button.on { background: #3b82f6; color: #fff; border-color: #3b82f6; }
+  .hint { font-size: 11.5px; color: #8b93a3; margin-top: 6px; }
+  button.go { width: 100%; padding: 12px; border-radius: 10px; border: none; background: #3b82f6; color: #fff; font-size: 15px; font-weight: 700; cursor: pointer; margin-top: 4px; }
+  button.go:disabled { opacity: .5; }
+  .msg { font-size: 12.5px; margin-top: 8px; min-height: 16px; }
+  .msg.ok { color: #54d088; } .msg.err { color: #ff9b9b; }
+  .tools { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .tool { background: #0f1115; border: 1px solid #232b3a; border-radius: 11px; padding: 11px 12px; }
+  .tool .nm { font-weight: 600; }
+  .tool .meta { font-size: 12px; color: #8b93a3; margin-top: 2px; }
+  .tool a { color: #7db1ff; text-decoration: none; font-size: 12.5px; cursor: pointer; }
+  .tool .acts { margin-top: 6px; }
+  .st { font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 6px; margin-left: 4px; }
+  .st.up { background: #143024; color: #54d088; } .st.down { background: #3a1a1d; color: #ff7a7a; }
+  .tool.up .startbtn { display: none; }
+  .tool.down .open, .tool.down .stopbtn { display: none; }
+  .tool .acts a { margin-right: 12px; }
+  .tool .log { display: none; margin-top: 9px; background: #07090d; border: 1px solid #1d2433; border-radius: 8px;
+    padding: 8px 10px; font: 11px/1.45 ui-monospace, Menlo, monospace; color: #b9c0cd; white-space: pre-wrap; max-height: 210px; overflow: auto; }
+  .badge { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 6px; background: #1d2b46; color: #7db1ff; }
+  .note { border-top: 1px solid #1d2433; padding: 9px 0; font-size: 13px; }
+  .note:first-child { border-top: none; }
+  .note .top { display: flex; gap: 7px; align-items: center; margin-bottom: 2px; flex-wrap: wrap; }
+  .src { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 6px; }
+  .src.hi { background: #143024; color: #54d088; } .src.idea { background: #33290f; color: #f0c050; } .src.other { background: #2a2f3a; color: #aeb6c4; }
+  .note .when { color: #8b93a3; font-size: 11px; }
+  .note .txt { color: #d2d8e2; line-height: 1.45; }
+  .empty { color: #8b93a3; font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1><span class="dot"></span> Notes &amp; Memory</h1>
+  <p class="sub">Jot a note — it goes into the client's shared memory the copilots read. &nbsp;·&nbsp; <a href="/">Excel review →</a></p>
+
+  <h2>Your copilots &amp; agents</h2>
+  <div class="tools" id="tools"><div class="empty">loading…</div></div>
+
+  <h2>Add a note to memory</h2>
+  <div class="card">
+    <div class="row">
+      <div>
+        <label class="fld">Client</label>
+        <select id="client"><option>loading…</option></select>
+      </div>
+      <div>
+        <label class="fld">Category (optional)</label>
+        <select id="category">
+          <option value="">— none —</option>
+          <option>performance</option><option>creative-direction</option><option>messaging</option>
+          <option>audience</option><option>offer</option><option>compliance-recurring</option><option>sourcing</option>
+        </select>
+      </div>
+    </div>
+    <div class="gap"></div>
+    <label class="fld">What kind of note?</label>
+    <div class="seg" id="kind">
+      <button data-s="brainstorm" class="on">💡 Brainstorm</button>
+      <button data-s="client-feedback">🗣️ Client feedback</button>
+      <button data-s="team-feedback">👥 Team feedback</button>
+    </div>
+    <div class="hint" id="kindhint">Brainstorm = your tentative idea. Client / Team feedback is treated as authoritative — agents weight it higher.</div>
+    <div class="gap"></div>
+    <label class="fld">Note</label>
+    <textarea id="note" placeholder="e.g. Client loves the Senada UGC angle — lean into testimonial-style hooks. / The quiz funnel is outperforming the direct LP on cold traffic."></textarea>
+    <button class="go" id="save">Save to memory</button>
+    <div class="msg" id="msg"></div>
+  </div>
+
+  <h2>Drop a marketing link 🔗</h2>
+  <div class="card">
+    <div class="hint" style="margin:0 0 10px">Paste a link to an ad teardown, landing page, or marketing article. The copilot reads it, pulls out reusable ideas, and files them as <b>brainstorming</b> material (tagged as ideas, not rules) — a swipe file the agents can riff on later.</div>
+    <label class="fld">Link</label>
+    <input id="linkurl" type="url" placeholder="https://… an ad teardown, landing page, or marketing article" />
+    <div class="gap"></div>
+    <label class="fld">File under</label>
+    <select id="linkclient"><option value="general">general — cross-client ideas</option></select>
+    <div class="gap"></div>
+    <button class="go" id="learn">Learn from this link</button>
+    <div class="msg" id="linkmsg"></div>
+    <div id="linkout"></div>
+  </div>
+
+  <h2 id="recenttitle">Recent notes</h2>
+  <div class="card"><div id="recent"><div class="empty">—</div></div></div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let kind = "brainstorm";
+
+function api(path, opts) { return fetch(path, opts).then(r => r.json()); }
+
+// copilots — live status + background Start/Stop + inline Logs (no Terminals)
+const attr = (s) => String(s).replace(/"/g, "&quot;");
+const sel = (s) => String(s).replace(/"/g, '\\"');
+
+function toolCard(t) {
+  const badge = `<span class="badge">${t.type || "info"}</span>`;
+  if (t.type === "server") {
+    const up = !!t.running;
+    return `<div class="tool ${up ? "up" : "down"}" data-name="${attr(t.name)}">
+      <div class="nm">${t.name} ${badge} <span class="st ${up ? "up" : "down"}">${up ? "running" : "down"}</span></div>
+      <div class="meta">:${t.port || ""} · server</div>
+      <div class="acts">
+        ${t.url ? `<a class="open" href="${t.url}" target="_blank">Open ↗</a>` : ""}
+        <a class="startbtn">▶ Start</a><a class="stopbtn">Stop</a><a class="logbtn">Logs</a>
+      </div><pre class="log"></pre></div>`;
+  }
+  if (t.type === "chrome") {
+    return `<div class="tool" data-name="${attr(t.name)}"><div class="nm">${t.name} ${badge}</div>
+      <div class="meta">Chrome extension</div>${t.url ? `<div class="acts"><a href="${t.url}" target="_blank">Open ↗</a></div>` : ""}</div>`;
+  }
+  return `<div class="tool" data-name="${attr(t.name)}"><div class="nm">${t.name} ${badge}</div>
+    <div class="meta">${t.note || "info"}</div></div>`;
+}
+
+let toolsKey = "";
+function refreshTools() {
+  api("/copilots-config").then(cfg => {
+    const tools = (cfg && cfg.tools) || [];
+    const key = tools.map(t => t.name + ":" + t.type).join("|");
+    if (key !== toolsKey) {
+      $("tools").innerHTML = tools.map(toolCard).join("") || '<div class="empty">No copilots.json found.</div>';
+      toolsKey = key;
+    }
+    tools.forEach(t => {            // surgical status update — keeps open logs intact
+      if (t.type !== "server") return;
+      const card = $("tools").querySelector(`.tool[data-name="${sel(t.name)}"]`);
+      if (!card) return;
+      card.classList.toggle("up", !!t.running);
+      card.classList.toggle("down", !t.running);
+      const st = card.querySelector(".st");
+      if (st) { st.textContent = t.running ? "running" : "down"; st.className = "st " + (t.running ? "up" : "down"); }
+    });
+  }).catch(() => { $("tools").innerHTML = '<div class="empty">control-room/copilots.json not found.</div>'; toolsKey = ""; });
+}
+refreshTools();
+setInterval(refreshTools, 4000);
+
+$("tools").addEventListener("click", async (e) => {
+  const a = e.target.closest("a"); if (!a) return;
+  const card = a.closest(".tool"); const name = card && card.dataset.name;
+  if (a.classList.contains("startbtn")) { e.preventDefault(); await toolAct("/start-tool", name, a, "▶ Start", "starting…"); setTimeout(refreshTools, 1500); }
+  else if (a.classList.contains("stopbtn")) { e.preventDefault(); await toolAct("/stop-tool", name, a, "Stop", "stopping…"); setTimeout(refreshTools, 800); }
+  else if (a.classList.contains("logbtn")) { e.preventDefault(); toggleLog(card, name); }
+});
+
+async function toolAct(path, name, a, label, busy) {
+  a.textContent = busy;
+  const r = await api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) }).catch(() => null);
+  a.textContent = label;
+  if (!r || (!r.ok && !r.already_running)) {
+    const pre = a.closest(".tool").querySelector(".log");
+    if (pre) { pre.style.display = "block"; pre.textContent = "Error: " + ((r && r.detail) || "request failed"); }
+  }
+}
+
+function toggleLog(card, name) {
+  const pre = card.querySelector(".log"); if (!pre) return;
+  if (pre.style.display === "block") { pre.style.display = "none"; if (pre._iv) { clearInterval(pre._iv); pre._iv = null; } return; }
+  pre.style.display = "block";
+  const load = async () => {
+    const d = await api("/tool-logs?lines=150&name=" + encodeURIComponent(name)).catch(() => ({ log: "(couldn't load log)" }));
+    pre.textContent = (d && d.log) || ""; pre.scrollTop = pre.scrollHeight;
+  };
+  load(); pre._iv = setInterval(load, 2500);
+}
+
+// clients
+api("/clients").then(d => {
+  const cl = d.clients || [];
+  $("client").innerHTML = cl.map(c => `<option>${c}</option>`).join("") || "<option>(none)</option>";
+  $("linkclient").innerHTML = `<option value="general">general — cross-client ideas</option>` + cl.map(c => `<option>${c}</option>`).join("");
+  loadRecent();
+}).catch(() => $("client").innerHTML = "<option>helper offline?</option>");
+
+$("client").addEventListener("change", loadRecent);
+
+$("kind").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  kind = b.dataset.s;
+  [...$("kind").children].forEach(x => x.classList.toggle("on", x === b));
+});
+
+$("save").onclick = async () => {
+  const note = $("note").value.trim();
+  if (!note) { setMsg("Type a note first.", true); return; }
+  $("save").disabled = true; setMsg("Saving…");
+  const resp = await api("/learnings", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      client: $("client").value, learning: note, source: kind,
+      category: $("category").value, applies_to: "all"
+    })
+  }).catch(() => null);
+  $("save").disabled = false;
+  if (resp && resp.ok) { setMsg("Saved to " + $("client").value + " memory ✓", false, true); $("note").value = ""; loadRecent(); }
+  else { setMsg("Couldn't save — is the helper running?", true); }
+};
+
+function setMsg(t, err, ok) { const m = $("msg"); m.textContent = t; m.className = "msg" + (err ? " err" : ok ? " ok" : ""); }
+function setLinkMsg(t, err, ok) { const m = $("linkmsg"); m.textContent = t; m.className = "msg" + (err ? " err" : ok ? " ok" : ""); }
+
+$("learn").onclick = async () => {
+  const url = $("linkurl").value.trim();
+  if (!url) { setLinkMsg("Paste a link first.", true); return; }
+  $("learn").disabled = true; setLinkMsg("Reading the page and mining ideas… (a few seconds)"); $("linkout").innerHTML = "";
+  const resp = await api("/learn-link", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url, client: $("linkclient").value })
+  }).catch(() => null);
+  $("learn").disabled = false;
+  if (!resp || !resp.ok) { setLinkMsg((resp && resp.detail) ? String(resp.detail) : "Couldn't learn from that link — is the helper running?", true); return; }
+  if (resp.ad_relevant === false) {
+    setLinkMsg("⚠ Not an ad-relevant source — nothing filed.", true);
+    $("linkurl").value = "";
+    $("linkout").innerHTML = `<div class="note"><div class="top"><span class="src other">not an ad source</span>${resp.domain ? ` <span class="when">${escapeHtml(resp.domain)}</span>` : ""}</div>
+      <div class="txt">${escapeHtml(resp.note || "This isn’t about ads, so there’s nothing to file. Try an actual ad, an ad teardown, or a landing page.")}</div></div>`;
+    return;
+  }
+  const n = resp.count || 0;
+  setLinkMsg(`Filed ${n} idea${n === 1 ? "" : "s"} under ${resp.client} memory ✓`, false, true);
+  $("linkurl").value = "";
+  $("linkout").innerHTML =
+    `<div class="hint" style="margin:12px 0 4px"><b>${escapeHtml(resp.topic || "Ideas")}</b> <span style="opacity:.6">· ${escapeHtml(resp.domain || "")}</span></div>` +
+    (resp.insights || []).map(i => `<div class="note"><div class="top"><span class="src idea">${escapeHtml(i.category || "idea")}</span></div>
+      <div class="txt">${escapeHtml(i.insight || "")}${i.why ? ` <span style="color:#8b93a3">— ${escapeHtml(i.why)}</span>` : ""}</div></div>`).join("");
+  if ($("client").value === resp.client) loadRecent();
+};
+
+async function loadRecent() {
+  const c = $("client").value;
+  $("recenttitle").textContent = "Recent notes — " + c;
+  const d = await api("/learnings?client=" + encodeURIComponent(c)).catch(() => ({ learnings: [] }));
+  const rows = ((d && d.learnings) || []).filter(l => l.active !== false).reverse().slice(0, 25);
+  if (!rows.length) { $("recent").innerHTML = '<div class="empty">No notes yet for this client.</div>'; return; }
+  $("recent").innerHTML = rows.map(l => {
+    const s = (l.source || "").toLowerCase();
+    const cls = (s === "client-feedback" || s === "team-feedback") ? "hi" : (s === "brainstorm" ? "idea" : "other");
+    const cat = l.category ? ` · ${l.category}` : "";
+    return `<div class="note"><div class="top"><span class="src ${cls}">${l.source || "—"}</span>
+      <span class="when">${l.date_logged || ""}${cat}</span></div>
+      <div class="txt">${escapeHtml(l.learning || "")}</div></div>`;
+  }).join("");
+}
+function escapeHtml(s){return String(s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
+</script>
+</body>
+</html>

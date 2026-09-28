@@ -1,0 +1,57 @@
+# ---------------------------------------------------------------------------
+# Credentials. NEVER commit. Four live .env files sit in these trees and only
+# one was covered before this repo existed; that is why the repo did not exist.
+# .env.example files ARE tracked on purpose (they carry key NAMES, no values).
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*credentials*
+*secret*
+*token*
+.netrc
+
+# ---------------------------------------------------------------------------
+# Generated media and pipeline output. 1.9 GB of this tree is scraped video,
+# rendered frames and raw run intermediates — all reproducible, none of it
+# source. Tracking any of it makes the repo unusable.
+# ---------------------------------------------------------------------------
+*.mp4
+*.mov
+*.webm
+*.avi
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.gif
+*.heic
+*.pdf
+*.zip
+*.sqlite
+*.db
+
+uplane-video-lab/data/jobs/
+uplane-video-lab/data/handoff/
+uplane-ads-scraper-meta/runs/
+uplane-ads-scraper-meta/reports/
+uplane-ads-scraper-meta/pilot/
+uplane-creative-studio/data/
+**/manifests/
+
+# ---------------------------------------------------------------------------
+# Environments, caches, editor and OS noise
+# ---------------------------------------------------------------------------
+.venv/
+venv/
+node_modules/
+__pycache__/
+*.pyc
+.DS_Store
+*.log
+*.bak
+*.orig
+.ipynb_checkpoints/
+minerva-inquiry-copilot/

@@ -1,0 +1,5 @@
+requests>=2.32
+slack-bolt>=1.18        # Socket Mode listener for the conversational half (bot.py)
+# anthropic is only needed if you set ANTHROPIC_API_KEY (LLM_BACKEND=api);
+# the default CLI backend uses the logged-in `claude` command.
+anthropic>=0.39

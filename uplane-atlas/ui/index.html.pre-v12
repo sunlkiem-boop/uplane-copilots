@@ -1,0 +1,962 @@
+<!doctype html><html><head><meta charset="utf-8">
+<title>Uplane Atlas</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root{--bg:#0f1815;--panel:#121e19;--line:#223b32;--ink:#dcefe7;--dim:#7fa294;
+        --acc:#39d98a;--warn:#e0a33c;--bad:#e8635a;--sel:#5cc8a8;--hung:#d97b39}
+  *{box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);overflow:hidden}
+  #top{display:flex;align-items:center;gap:10px;height:52px;padding:0 14px;
+       border-bottom:1px solid var(--line);background:var(--panel)}
+  #top h1{font-size:15px;margin:0 8px 0 0}
+  .tab{padding:6px 12px;border-radius:8px;cursor:pointer;font-size:13px;color:var(--dim)}
+  .tab.on{background:#1a2b24;color:var(--ink)}
+  .btn{border:1px solid var(--line);background:#16241e;color:var(--ink);border-radius:8px;
+       padding:6px 11px;font-size:12.5px;cursor:pointer}
+  .btn:hover{border-color:var(--sel)} .btn.on{background:#1d7a5c;border-color:#1d7a5c}
+  .btn.mini{padding:2px 8px;font-size:11px;border-radius:6px}
+  #savechip{margin-left:auto;font-size:12px;color:var(--dim)}
+  #savechip.dirty{color:var(--warn)} #savechip.err{color:var(--bad)}
+  #main{display:flex;height:calc(100% - 52px)}
+  #stage{flex:1;position:relative;overflow:hidden}
+  svg{width:100%;height:100%;display:block;cursor:grab}
+  svg.panning{cursor:grabbing} svg.connecting{cursor:crosshair}
+  #side{width:330px;border-left:1px solid var(--line);background:var(--panel);
+        padding:14px;overflow-y:auto;display:flex;flex-direction:column;gap:10px}
+  #side h3{margin:2px 0 4px;font-size:13px} #side label{font-size:11px;color:var(--dim);
+        text-transform:uppercase;letter-spacing:.4px}
+  #side input,#side select,#side textarea{width:100%;background:#0c1411;color:var(--ink);
+        border:1px solid var(--line);border-radius:8px;padding:7px 9px;font-size:13px}
+  #side textarea{min-height:60px;resize:vertical}
+  .crow{border:1px solid var(--line);border-radius:8px;padding:7px 9px;font-size:12.5px}
+  .crow .meta{color:var(--dim);font-size:11px;display:flex;justify-content:space-between}
+  .crow .del{cursor:pointer;color:var(--dim)} .crow .del:hover{color:var(--bad)}
+  .statbox{border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12.5px;
+        background:#0c1411}
+  .statbox .row{display:flex;justify-content:space-between;margin:2px 0;gap:8px}
+  .statbox .k{color:var(--dim)} .statbox .bad{color:var(--bad)} .statbox .ok{color:var(--acc)}
+  .statbox .warn{color:var(--warn)}
+  .node{cursor:grab} .node rect.body{fill:#16241e;stroke:var(--line);stroke-width:1.2}
+  .node.sel rect.body{stroke:var(--sel);stroke-width:2}
+  .node.dimmed{opacity:.28} .edge-g.dimmed{opacity:.15}
+  .node text{fill:var(--ink);font-size:13px;pointer-events:none}
+  .node .sub{fill:var(--dim);font-size:10.5px}
+  .node .badge{fill:var(--warn);font-size:10px;pointer-events:all;cursor:pointer}
+  .gcard{cursor:grab}
+  .gcard rect.body{fill:#182720;stroke:#2c4a3d;stroke-width:1.4}
+  .gcard.sel rect.body{stroke:var(--sel);stroke-width:2.2}
+  .gcard text.glabel{fill:var(--ink);font-size:14px;font-weight:600;pointer-events:none}
+  .gcard text.gcount{fill:var(--dim);font-size:11px;pointer-events:none}
+  .gframe rect.fr{fill:#14201a;stroke:#2c4a3d;stroke-width:1.2;opacity:.85}
+  .gframe text.glabel{fill:var(--ink);font-size:13px;font-weight:600;cursor:grab}
+  .gframe text.gcol{fill:var(--dim);font-size:11px;cursor:pointer}
+  .edge{stroke:#3a5a4d;stroke-width:1.6;fill:none;marker-end:url(#arr)}
+  .edge.sel{stroke:var(--sel);stroke-width:2.4}
+  .edge.lit{stroke:var(--sel);stroke-width:2}
+  .edge.agg{stroke-width:2.6;opacity:.85}
+  .edgehit{stroke:transparent;stroke-width:14;fill:none;cursor:pointer}
+  .edgelabel{fill:var(--dim);font-size:10.5px;paint-order:stroke;stroke:var(--bg);
+        stroke-width:3px;stroke-linejoin:round}
+  .porthandle{fill:var(--sel);opacity:.28;cursor:crosshair}
+  .node:hover .porthandle,.porthandle:hover{opacity:1}
+  .dot{r:4.5} .dot.ok{fill:var(--acc)} .dot.down{fill:var(--bad)} .dot.na{fill:#3a5a4d}
+  .dot.degraded{fill:var(--warn)} .dot.hung{fill:var(--hung)} .dot.unknown{fill:#3a5a4d}
+  .dot.stale{fill:var(--warn)}
+  .droptarget rect.body,.droptarget rect.fr{stroke:var(--sel)!important;stroke-width:2.6!important}
+  #traj{flex:1;overflow-y:auto;padding:16px 20px;display:none}
+  .dayhead{font-size:11.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;
+        margin:14px 0 7px;border-bottom:1px solid var(--line);padding-bottom:4px}
+  .titem{display:flex;gap:12px;padding:9px 12px;border:1px solid var(--line);
+         border-radius:10px;margin-bottom:7px;background:var(--panel);font-size:13px}
+  .titem .when{color:var(--dim);width:52px;flex:none;font-size:11.5px}
+  .titem .kind{width:86px;flex:none;font-size:11px;text-transform:uppercase;
+               letter-spacing:.4px;padding-top:2px}
+  .kind.generation{color:var(--acc)} .kind.edit{color:var(--warn)}
+  .kind.job{color:var(--dim)} .kind.verdict{color:var(--sel)} .kind.outage{color:var(--bad)}
+  .titem .body{flex:1;min-width:0} .titem .detail{color:var(--dim);font-size:12px;margin-top:2px}
+  .titem .cbtn{color:var(--dim);cursor:pointer;font-size:11.5px;flex:none}
+  .titem .cbtn:hover{color:var(--ink)} .titem a{color:var(--sel)}
+  .tcomment{margin:4px 0 0;padding:6px 9px;background:#0c1411;border-radius:8px;
+            font-size:12px;border:1px solid var(--line)}
+  .cform{margin-top:6px;display:flex;gap:6px}
+  .cform input{flex:1;background:#0c1411;color:var(--ink);border:1px solid var(--line);
+            border-radius:7px;padding:5px 8px;font-size:12px}
+  #banner{position:absolute;left:50%;top:10px;transform:translateX(-50%);z-index:20;
+        display:none;background:#20140f;border:1px solid #7d3a35;color:#f3d3cf;
+        border-radius:10px;padding:8px 14px;font-size:12.5px;max-width:70%;
+        box-shadow:0 4px 18px rgba(0,0,0,.4)}
+  #banner.info{background:#12211c;border-color:#2a4a3f;color:#cfe9de}
+  #banner .btn{margin-left:8px}
+  #legend{position:absolute;left:12px;bottom:12px;background:var(--panel);
+          border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-size:11px;
+          color:var(--dim);display:flex;gap:12px}
+  .lg{display:flex;align-items:center;gap:5px}
+  .sw{width:10px;height:10px;border-radius:3px;display:inline-block}
+  #helpbtn{position:absolute;right:12px;bottom:12px;width:28px;height:28px;border-radius:50%;
+        background:var(--panel);border:1px solid var(--line);color:var(--dim);cursor:pointer;
+        font-size:14px;line-height:26px;text-align:center}
+  #helppop{position:absolute;right:12px;bottom:48px;width:280px;background:var(--panel);
+        border:1px solid var(--line);border-radius:10px;padding:10px 13px;font-size:12px;
+        color:var(--dim);display:none;line-height:1.6;z-index:25}
+  #helppop b{color:var(--ink)}
+  #emptycta{position:absolute;inset:0;display:none;align-items:center;justify-content:center;
+        color:var(--dim);font-size:14px;pointer-events:none}
+  #offline{position:absolute;inset:0;display:none;align-items:center;justify-content:center;
+        flex-direction:column;gap:10px;background:var(--bg);z-index:30;color:var(--dim)}
+  #filters{display:none;align-items:center;gap:8px}
+  #filters select{background:#0c1411;color:var(--ink);border:1px solid var(--line);
+        border-radius:8px;padding:5px 8px;font-size:12px}
+</style></head><body>
+<div id="top">
+  <h1>Uplane Atlas</h1>
+  <div class="tab on" data-tab="map">Map</div>
+  <div class="tab" data-tab="traj">Agent trajectories</div>
+  <span id="mapbtns">
+    <button class="btn" id="addNode">+ Node</button>
+    <button class="btn" id="addGroup">+ Group</button>
+    <button class="btn" id="connect">Connect</button>
+    <button class="btn" id="collapseAll">Overview</button>
+    <button class="btn" id="fit">Fit</button>
+    <button class="btn" id="undo">Undo</button>
+  </span>
+  <span id="filters">
+    <select id="fAgent"><option value="">all agents</option></select>
+    <select id="fKind"><option value="">all kinds</option>
+      <option>generation</option><option>edit</option><option>verdict</option>
+      <option>job</option><option>outage</option></select>
+    <button class="btn" id="refreshTraj">Refresh</button>
+  </span>
+  <span id="savechip">loading…</span>
+</div>
+<div id="main">
+  <div id="stage">
+    <div id="banner"></div>
+    <svg id="svg">
+      <defs><marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7.5"
+        markerHeight="7.5" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#5a8a74"/></marker></defs>
+      <g id="world"><g id="framesG"></g><g id="edgesG"></g><g id="nodesG"></g>
+        <path id="ghost" class="edge" stroke-dasharray="5 4" style="display:none"/></g>
+    </svg>
+    <div id="emptycta">Double-click anywhere to add your first node</div>
+    <div id="legend"></div>
+    <div id="helpbtn">?</div>
+    <div id="helppop">
+      <b>Overview first:</b> each card is a function of your stack — its dot is the
+      WORST health inside it. <b>Click a card</b> to open that function (others close).<br>
+      <b>Move an asset</b>: drag it onto another group's card or frame.<br>
+      <b>Pan</b> scroll or drag canvas · <b>Zoom</b> pinch or ⌘-scroll<br>
+      <b>Connect</b> drag the dot on an asset's right edge onto another asset<br>
+      <b>Rename</b> double-click · <b>Delete</b> select + ⌫ · <b>Undo</b> ⌘Z<br>
+      Autosaves to <b>atlas.json</b>; hand/agent edits to that file appear here in ~3s.
+    </div>
+    <div id="offline">
+      <div style="font-size:16px;color:var(--ink)">Atlas helper is not reachable on :8792</div>
+      <div>Start it from the Control Room menu (Atlas → Start); this page recovers on its own.</div>
+      <div id="offlinemsg" style="font-size:11.5px"></div>
+    </div>
+  </div>
+  <div id="traj"></div>
+  <div id="side"></div>
+</div>
+<script>
+"use strict";
+const TYPES = {
+  copilot:  {color:"#1d7a5c", label:"copilot"},
+  extension:{color:"#7a5c1d", label:"chrome ext"},
+  store:    {color:"#3d5c8a", label:"data store"},
+  external: {color:"#6a3d8a", label:"external"},
+  skill:    {color:"#8a3d55", label:"skill"},
+  client:   {color:"#4d6b3a", label:"client"},
+  note:     {color:"#4a4a4a", label:"note"},
+};
+const STALE_S = { adbot:86400*3, ecap:86400*7, digest:86400*2, jobs:86400*2,
+                  learn:86400*14, scraper:86400*14, vlab:86400*14, graph:86400*7, atlasdoc:86400*30 };
+const SEV = {down:5, hung:4, degraded:3, stale:2, unknown:1, na:1, ok:0};
+const S = { doc:{version:0,nodes:[],edges:[],groups:[],comments:[]}, sel:null, selKind:null,
+            dirty:false, saving:false, undo:[], view:{x:60,y:40,k:1}, live:null,
+            liveOk:true, connectFrom:null, traj:[], trajSources:null, trajErr:false,
+            mode:"map", conflict:null, drafts:{} };
+const $=(q)=>document.querySelector(q);
+const svg=$("#svg"), world=$("#world"), nodesG=$("#nodesG"), edgesG=$("#edgesG"), framesG=$("#framesG");
+const NW=168, NH=54, GW=210, GH=66;
+let dragging=false, zoomRenderT=null;
+const esc=(s)=>String(s??"").replace(/[&<>"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[m]));
+
+// ---------- banner ----------
+let bannerT=null;
+function banner(html,kind,sticky){
+  const b=$("#banner"); b.className=kind||""; b.innerHTML=html; b.style.display="block";
+  clearTimeout(bannerT);
+  if(!sticky) bannerT=setTimeout(()=>{b.style.display="none";},6000);
+}
+function hideBanner(){ $("#banner").style.display="none"; }
+
+// ---------- persistence ----------
+async function loadDoc(){
+  try{
+    const r=await fetch("/api/map");
+    if(r.status===503){ const j=await r.json();
+      banner(`⚠ ${esc(j.cause)} — ${esc(j.fix)}`,"",true); return false; }
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    S.doc=await r.json();
+    S.doc.comments=S.doc.comments||[]; S.doc.groups=S.doc.groups||[];
+    $("#offline").style.display="none";
+    render(); chip(`v${S.doc.version}`); return true;
+  }catch(e){
+    $("#offline").style.display="flex";
+    $("#offlinemsg").textContent="retrying every 3s · "+new Date().toLocaleTimeString();
+    return false;
+  }
+}
+let saveT=null;
+// snapshot BEFORE mutation — post-mutation snapshots made the first ⌘Z a no-op
+function snap(){
+  S.undo.push(JSON.stringify({nodes:S.doc.nodes,edges:S.doc.edges,groups:S.doc.groups}));
+  if(S.undo.length>60) S.undo.shift();
+}
+function markDirty(){
+  S.dirty=true; chip("unsaved…","dirty");
+  clearTimeout(saveT); saveT=setTimeout(save,700);
+}
+async function save(){
+  if(S.saving) return; S.saving=true;
+  try{
+    const r=await fetch("/api/map",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({baseVersion:S.doc.version,nodes:S.doc.nodes,edges:S.doc.edges,
+                           groups:S.doc.groups,comments:S.doc.comments})});
+    const j=await r.json().catch(()=>({}));
+    if(r.status===409){
+      S.conflict=j.doc||null;
+      banner(`The map changed elsewhere (now v${j.version}). `
+        +`<button class="btn mini" id="bKeep">Keep my edits</button>`
+        +`<button class="btn mini" id="bTake">Take theirs</button>`,"info",true);
+      $("#bKeep").onclick=()=>{ S.doc.version=j.version; S.conflict=null; hideBanner(); save(); };
+      $("#bTake").onclick=async()=>{ S.conflict=null; hideBanner(); S.dirty=false;
+        await loadDoc(); renderSide(); };
+    }
+    else if(r.status===503){ banner(`⚠ ${esc(j.cause||"map unreadable")} — ${esc(j.fix||"")}`,"",true); }
+    else if(r.ok){ S.doc.version=j.version; S.dirty=false; chip(`saved · v${j.version}`); }
+    else chip("save failed: "+(j.cause||r.status),"err");
+  }catch(e){
+    chip("helper offline — changes NOT saved (kept here; retrying)","err");
+    clearTimeout(saveT); saveT=setTimeout(save,4000);
+  }
+  S.saving=false;
+}
+function chip(t,cls){ const c=$("#savechip"); c.textContent=t; c.className=cls||""; }
+addEventListener("beforeunload",(e)=>{ if(S.dirty){ e.preventDefault(); e.returnValue=""; }});
+setInterval(async()=>{
+  if(S.dirty||S.saving||S.conflict) return;
+  try{ const r=await fetch("/api/map"); if(!r.ok) return; const j=await r.json();
+    if(S.dirty||S.saving||dragging) return;      // re-check when the response ARRIVES
+    if(j.version!==S.doc.version){ S.doc=j;
+      S.doc.comments=S.doc.comments||[]; S.doc.groups=S.doc.groups||[];
+      render(); renderSide(); chip(`synced · v${j.version}`); }
+    $("#offline").style.display="none";
+  }catch(e){}
+},3000);
+setInterval(()=>{ if($("#offline").style.display==="flex") loadDoc(); },3000);
+
+// ---------- model helpers ----------
+function applyView(){ world.setAttribute("transform",
+  `translate(${S.view.x},${S.view.y}) scale(${S.view.k})`); }
+function toWorld(ev){ const r=svg.getBoundingClientRect();
+  return {x:(ev.clientX-r.left-S.view.x)/S.view.k, y:(ev.clientY-r.top-S.view.y)/S.view.k}; }
+function nodeById(id){ return S.doc.nodes.find(n=>n.id===id); }
+function groupById(id){ return (S.doc.groups||[]).find(g=>g.id===id); }
+function membersOf(gid){ return S.doc.nodes.filter(n=>n.group===gid); }
+function commentsFor(id){ return S.doc.comments.filter(c=>c.target===id); }
+
+function healthFor(n){
+  if(!S.live) return null;
+  if(n.port){
+    const h=(S.live.nodes||{})[String(n.port)];
+    if(!h) return {cls:"unknown", text:"port not probed"};
+    return {cls:h.state, text:h.state+(h.detail?` — ${h.detail}`:""), health:h.health};
+  }
+  return null;
+}
+function trailFor(n){
+  if(!S.live||!n.trail) return null;
+  const t=(S.live.trails||{})[n.trail];
+  if(!t) return {stale:true, text:"no activity recorded"};
+  const age=(Date.now()-new Date(t.replace(" ","T")).getTime())/1000;
+  const lim=STALE_S[n.trail]||86400*7;
+  const ago=age<3600?`${Math.round(age/60)}m ago`:age<86400?`${Math.round(age/3600)}h ago`
+           :`${Math.round(age/86400)}d ago`;
+  return {stale:age>lim, text:`last activity ${ago} (${t.slice(0,16).replace("T"," ")})`, age};
+}
+function nodeState(n){
+  const h=healthFor(n), tr=trailFor(n);
+  if(h && h.cls!=="ok") return h.cls;
+  if(tr && tr.stale) return h ? "stale" : "stale";
+  if(h) return "ok";
+  if(tr) return "ok";
+  return "na";
+}
+// rollup: a function is as healthy as its sickest member — that is the whole point
+// of the overview
+function groupState(gid){
+  let worst="na", why="";
+  for(const n of membersOf(gid)){
+    const st=nodeState(n);
+    if(SEV[st]>SEV[worst]){ worst=st; why=n.label||n.id; }
+  }
+  return {state:worst, why};
+}
+
+// layout: where does each node/group actually SIT right now
+function layout(){
+  const pos={}, gRect={};
+  for(const g of S.doc.groups||[]){
+    const mem=membersOf(g.id);
+    if(g.collapsed || !mem.length){
+      gRect[g.id]={x:g.x,y:g.y,w:GW,h:GH,collapsed:true};
+    }else{
+      const cols=Math.min(3, Math.max(1, Math.ceil(Math.sqrt(mem.length))));
+      const rows=Math.ceil(mem.length/cols);
+      const w=cols*(NW+16)+16, h=rows*(NH+14)+50;
+      gRect[g.id]={x:g.x,y:g.y,w,h,collapsed:false};
+      mem.forEach((n,i)=>{
+        pos[n.id]={x:g.x+16+(i%cols)*(NW+16), y:g.y+40+Math.floor(i/cols)*(NH+14), w:NW, h:NH};
+      });
+    }
+  }
+  for(const n of S.doc.nodes){
+    if(!n.group || !groupById(n.group))
+      pos[n.id]={x:n.x,y:n.y,w:NW,h:NH};
+  }
+  // Collision resolution (display-only, never persisted): an expanded frame is much
+  // wider than a collapsed card, so it used to sit UNDER its right-hand neighbour and
+  // hide both titles. Sweep left-to-right; whatever a frame overlaps gets pushed
+  // right, members riding along with their group.
+  const ids=Object.keys(gRect).sort((a,b)=>gRect[a].x-gRect[b].x);
+  for(let i=0;i<ids.length;i++){
+    for(let j=i+1;j<ids.length;j++){
+      const A=gRect[ids[i]], B=gRect[ids[j]];
+      const overlapX=(A.x+A.w+28)-B.x, overlapY=Math.min(A.y+A.h,B.y+B.h)-Math.max(A.y,B.y);
+      if(overlapX>0 && overlapY>0){
+        B.x+=overlapX;
+        for(const n of membersOf(ids[j])) if(pos[n.id]) pos[n.id].x+=overlapX;
+      }
+    }
+  }
+  return {pos,gRect};
+}
+// effective endpoint for an edge: the node's cell if visible, else its group's card
+function effRect(id, L){
+  if(L.pos[id]) return {rect:L.pos[id], key:id};
+  const n=nodeById(id);
+  if(n && n.group && L.gRect[n.group]) return {rect:L.gRect[n.group], key:"G:"+n.group};
+  return null;
+}
+function anchors(a,b){
+  const ac={x:a.x+a.w/2,y:a.y+a.h/2}, bc={x:b.x+b.w/2,y:b.y+b.h/2};
+  const dx=bc.x-ac.x, dy=bc.y-ac.y;
+  if(Math.abs(dx)>=Math.abs(dy))
+    return [{x:dx>0?a.x+a.w:a.x,y:ac.y},{x:dx>0?b.x:b.x+b.w,y:bc.y}];
+  return [{x:ac.x,y:dy>0?a.y+a.h:a.y},{x:bc.x,y:dy>0?b.y:b.y+b.h}];
+}
+function incident(id){ return S.doc.edges.filter(e=>e.from===id||e.to===id); }
+
+// ---------- render ----------
+function render(){
+  nodesG.innerHTML=""; edgesG.innerHTML=""; framesG.innerHTML="";
+  $("#emptycta").style.display=(S.doc.nodes.length||S.doc.groups.length)?"none":"flex";
+  const L=layout();
+  const litIds=S.sel&&S.selKind==="node"?new Set(incident(S.sel).map(e=>e.id)):null;
+  const nbr=S.sel&&S.selKind==="node"
+    ?new Set(incident(S.sel).flatMap(e=>[e.from,e.to])):null;
+
+  // edges — collapsed groups aggregate their members' flows into one weighted line
+  // ONE line per pair of endpoints, whatever the direction. Slack→Ad-Bot and
+  // Ad-Bot→Slack used to draw two near-parallel curves — "separate lines; confusing".
+  // Both directions merge into a single path with an arrowhead on each end.
+  const agg=new Map();
+  for(const e of S.doc.edges){
+    const A=effRect(e.from,L), B=effRect(e.to,L);
+    if(!A||!B||A.key===B.key) continue;
+    const fwd=A.key<B.key;
+    const k=fwd?A.key+"⇄"+B.key:B.key+"⇄"+A.key;
+    if(!agg.has(k)) agg.set(k,{A:fwd?A:B,B:fwd?B:A,edges:[],fwdN:0,revN:0});
+    const g=agg.get(k); g.edges.push(e);
+    if((fwd?A:B).key===effRect(e.from,L).key) g.fwdN++; else g.revN++;
+  }
+  const labelBoxes=[];
+  for(const [k,{A,B,edges,fwdN,revN}] of agg){
+    const [p1,p2]=anchors(A.rect,B.rect);
+    const mx=(p1.x+p2.x)/2;
+    const c=`M${p1.x},${p1.y} C${mx},${p1.y} ${mx},${p2.y} ${p2.x},${p2.y}`;
+    const one=edges.length===1?edges[0]:null;
+    const g=document.createElementNS(svg.namespaceURI,"g");
+    const lit=litIds&&edges.some(e=>litIds.has(e.id));
+    const dim=nbr&&!lit;
+    g.setAttribute("class","edge-g"+(dim?" dimmed":""));
+    const h=(k.charCodeAt(1)||0)+(k.charCodeAt(k.length-1)||0);
+    const lt=[0.30,0.44,0.58,0.72][h%4];
+    const lx=p1.x+(p2.x-p1.x)*lt, ly=p1.y+(p2.y-p1.y)*lt;
+    const label=one?one.label:`${edges.length} flows`;
+    const showLabel=label&&(S.view.k>0.85||edges.length>1||(one&&S.sel===one.id)||lit);
+    const heads=(revN>0?'marker-start="url(#arr)" ':"")+(fwdN>0?'marker-end="url(#arr)"':"");
+    g.innerHTML=`<path class="edgehit" d="${c}"/>`
+      +`<path class="edge ${one&&S.sel===one.id?"sel":""} ${lit?"lit":""} ${edges.length>1?"agg":""}" d="${c}" style="marker-end:none;marker-start:none" ${heads}/>`;
+    if(showLabel){
+      // Label bubble: text on a pill so crossing strokes never run through the words,
+      // then nudged down until it overlaps no earlier label (two-pass relaxation).
+      const w=label.length*6.4+16;
+      let bx=lx-w/2, by=ly-9;
+      for(let pass=0;pass<2;pass++)
+        for(const bb of labelBoxes)
+          if(!(bx+w<bb.x||bb.x+bb.w<bx||by+18<bb.y||bb.y+18<by)) by=bb.y+22;
+      labelBoxes.push({x:bx,y:by,w});
+      const lbl=document.createElementNS(svg.namespaceURI,"g");
+      lbl.innerHTML=`<rect x="${bx}" y="${by}" width="${w}" height="18" rx="9"
+          fill="var(--panel)" stroke="var(--line)" opacity="0.95"/>
+        <text class="edgelabel" x="${bx+w/2}" y="${by+13}" text-anchor="middle"
+          style="paint-order:normal;stroke:none">${esc(label)}</text>`;
+      g.appendChild(lbl);
+    }
+    const hit=g.querySelector(".edgehit");
+    hit.addEventListener("pointerdown",(ev)=>{ ev.stopPropagation();
+      if(one) select(one.id,"edge");
+      else banner("Flows bundled here: "+edges.map(e=>{
+        const a=nodeById(e.from),b=nodeById(e.to);
+        return `${esc(a?.label||e.from)} → ${esc(b?.label||e.to)}${e.label?" ("+esc(e.label)+")":""}`;
+      }).join(" · "),"info");
+    });
+    if(one) hit.addEventListener("dblclick",(ev)=>{ ev.stopPropagation(); select(one.id,"edge");
+      setTimeout(()=>{const f=$("#f-elabel"); if(f){f.focus();f.select();}},30); });
+    edgesG.appendChild(g);
+  }
+
+  // groups
+  for(const g of S.doc.groups||[]){
+    const R=L.gRect[g.id]; if(!R) continue;
+    const mem=membersOf(g.id);
+    if(R.collapsed){
+      const {state,why}=groupState(g.id);
+      const el=document.createElementNS(svg.namespaceURI,"g");
+      el.setAttribute("class","gcard"+(S.sel===g.id?" sel":""));
+      el.setAttribute("transform",`translate(${R.x},${R.y})`);
+      el.dataset.gid=g.id;
+      el.innerHTML=`<rect class="body" width="${GW}" height="${GH}" rx="12"/>
+        <text class="glabel" x="16" y="27">${esc(g.label)}</text>
+        <text class="gcount" x="16" y="47">${mem.length} asset${mem.length===1?"":"s"}${SEV[state]>0&&why?` · ⚠ ${esc(why)}`:""}</text>
+        <circle class="dot ${state}" cx="${GW-16}" cy="17"><title>${esc(state)}${why?" — "+esc(why):""}</title></circle>`;
+      el.addEventListener("pointerdown",(ev)=>{ ev.stopPropagation(); groupPointer(g,ev); });
+      el.addEventListener("dblclick",(ev)=>{ ev.stopPropagation(); select(g.id,"group");
+        setTimeout(()=>{const f=$("#f-glabel"); if(f){f.focus();f.select();}},30); });
+      nodesG.appendChild(el);
+    }else{
+      const el=document.createElementNS(svg.namespaceURI,"g");
+      el.setAttribute("class","gframe"+(S.sel===g.id?" sel":""));
+      el.dataset.gid=g.id;
+      el.innerHTML=`<rect class="fr" x="${R.x}" y="${R.y}" width="${R.w}" height="${R.h}" rx="14"/>
+        <text class="glabel" x="${R.x+16}" y="${R.y+26}">${esc(g.label)}</text>
+        <text class="gcol" x="${R.x+R.w-64}" y="${R.y+26}">collapse</text>`;
+      el.querySelector(".glabel").addEventListener("pointerdown",(ev)=>{
+        ev.stopPropagation(); groupPointer(g,ev); });
+      el.querySelector(".gcol").addEventListener("pointerdown",(ev)=>{
+        ev.stopPropagation(); snap(); g.collapsed=true; markDirty(); render(); });
+      framesG.appendChild(el);
+    }
+  }
+
+  // nodes (grouped-and-expanded, or loose)
+  for(const n of S.doc.nodes){
+    const R=L.pos[n.id]; if(!R) continue;
+    const t=TYPES[n.type]||TYPES.note;
+    const g=document.createElementNS(svg.namespaceURI,"g");
+    const dim=nbr&&n.id!==S.sel&&!nbr.has(n.id);
+    g.setAttribute("class","node"+(S.sel===n.id?" sel":"")+(dim?" dimmed":""));
+    g.setAttribute("transform",`translate(${R.x},${R.y})`);
+    g.dataset.id=n.id;
+    const nc=commentsFor(n.id).length;
+    const h=healthFor(n), tr=trailFor(n);
+    const st=nodeState(n);
+    const dot=(n.port||n.trail)
+      ?`<circle class="dot ${st}" cx="${NW-14}" cy="14"><title>${esc((h&&h.text)||"")}${h&&tr?" · ":""}${esc((tr&&tr.text)||"")}</title></circle>`:"";
+    g.innerHTML=`<rect class="body" width="${NW}" height="${NH}" rx="10"/>
+      <rect width="5" height="${NH}" fill="${t.color}" rx="2"/>
+      <text x="14" y="22">${esc(n.label||n.id)}</text>
+      <text class="sub" x="14" y="38">${esc(n.sub||t.label)}</text>${dot}
+      ${nc?`<text class="badge" x="${NW-34}" y="${NH-8}">💬${nc}</text>`:""}
+      <circle class="porthandle" cx="${NW}" cy="${NH/2}" r="7"/>`;
+    const badge=g.querySelector(".badge");
+    if(badge) badge.addEventListener("pointerdown",(ev)=>{ ev.stopPropagation();
+      select(n.id,"node"); });
+    g.addEventListener("pointerdown",(ev)=>{
+      ev.stopPropagation();
+      if(ev.target.classList.contains("porthandle")){ startConnect(n,R,ev); return; }
+      if(S.connectFrom&&S.connectFrom.id!==n.id){
+        snap();
+        S.doc.edges.push({id:"e"+Date.now().toString(36),from:S.connectFrom.id,to:n.id,label:""});
+        endConnectMode(); markDirty(); render(); select(null,null); return;
+      }
+      if(S.connectFrom) return;
+      select(n.id,"node"); startNodeDrag(n,R,ev);
+    });
+    g.addEventListener("dblclick",(ev)=>{ ev.stopPropagation(); select(n.id,"node");
+      setTimeout(()=>{const f=$("#f-label"); if(f){f.focus();f.select();}},30); });
+    nodesG.appendChild(g);
+  }
+  applyView(); renderLegend(); renderDrift();
+}
+function renderLegend(){
+  $("#legend").innerHTML=Object.entries(TYPES).map(([k,t])=>
+    `<span class="lg"><span class="sw" style="background:${t.color}"></span>${t.label}</span>`).join("")
+    +`<span class="lg"><span class="sw" style="background:var(--acc);border-radius:50%"></span>ok</span>`
+    +`<span class="lg"><span class="sw" style="background:var(--warn);border-radius:50%"></span>degraded/stale</span>`
+    +`<span class="lg"><span class="sw" style="background:var(--bad);border-radius:50%"></span>down</span>`;
+}
+function renderDrift(){
+  if(!S.live||!S.live.drift) return;
+  const u=S.live.drift.unmapped||[];
+  if(!u.length){ if(($("#banner").textContent||"").includes("not on the map")) hideBanner(); return; }
+  const first=u[0];
+  banner(`${u.length} thing${u.length>1?"s are":" is"} in your stack but not on the map: `
+    +`<b>${esc(first.name)}</b>${u.length>1?" +"+(u.length-1)+" more":""} `
+    +`<button class="btn mini" id="bAddNode">Add to Ops</button>`,"info",true);
+  $("#bAddNode").onclick=()=>{
+    snap();
+    let gid=(S.doc.groups.find(g=>/ops|observ/i.test(g.label))||S.doc.groups[0]||{}).id;
+    for(const m of u){
+      S.doc.nodes.push({id:"n"+Date.now().toString(36)+Math.random().toString(36).slice(2,5),
+        type:"copilot",label:m.name,sub:"",note:m.why,x:0,y:0,
+        ...(m.port?{port:m.port}:{}), ...(gid?{group:gid}:{}), derived:true});
+    }
+    hideBanner(); markDirty(); render();
+  };
+}
+
+// ---------- interactions ----------
+function groupPointer(g,ev){
+  // drag moves the group; a click (no movement) toggles it open — opening one
+  // closes the others so the canvas never shows everything at once
+  const w0=toWorld(ev), ox=w0.x-g.x, oy=w0.y-g.y; let moved=false, snapped=false, raf=null;
+  dragging=true;
+  const mv=(e)=>{ const w=toWorld(e);
+    if(Math.abs(w.x-ox-g.x)+Math.abs(w.y-oy-g.y)<3&&!moved) return;
+    if(!snapped){ snap(); snapped=true; }
+    moved=true; g.x=Math.round((w.x-ox)/8)*8; g.y=Math.round((w.y-oy)/8)*8;
+    if(!raf) raf=requestAnimationFrame(()=>{raf=null; render();});
+  };
+  const up=()=>{ removeEventListener("pointermove",mv); removeEventListener("pointerup",up);
+    dragging=false;
+    if(moved){ markDirty(); return; }
+    snap();
+    const opening=g.collapsed;
+    if(opening) for(const o of S.doc.groups) o.collapsed=(o.id!==g.id);
+    else g.collapsed=true;
+    markDirty(); select(g.id,"group"); render();
+  };
+  addEventListener("pointermove",mv); addEventListener("pointerup",up);
+}
+function dropTargetAt(w, excludeNode){
+  const L=layout();
+  for(const g of S.doc.groups||[]){
+    const R=L.gRect[g.id];
+    if(R && w.x>=R.x&&w.x<=R.x+R.w&&w.y>=R.y&&w.y<=R.y+R.h) return g;
+  }
+  return null;
+}
+function startNodeDrag(n,R,ev){
+  const w0=toWorld(ev), ox=w0.x-R.x, oy=w0.y-R.y;
+  let moved=false, snapped=false, raf=null, gx=R.x, gy=R.y;
+  dragging=true;
+  const gEl=[...nodesG.children].find(el=>el.dataset.id===n.id);
+  const mv=(e)=>{ const w=toWorld(e);
+    if(!snapped){ snap(); snapped=true; }
+    moved=true; gx=w.x-ox; gy=w.y-oy;
+    if(gEl) gEl.setAttribute("transform",`translate(${gx},${gy})`);
+    const tgt=dropTargetAt(w,n);
+    document.querySelectorAll(".droptarget").forEach(x=>x.classList.remove("droptarget"));
+    if(tgt&&tgt.id!==n.group){
+      const el=[...nodesG.children,...framesG.children].find(x=>x.dataset.gid===tgt.id);
+      if(el) el.classList.add("droptarget");
+    }
+    if(!raf) raf=requestAnimationFrame(()=>{raf=null;});
+  };
+  const up=(e)=>{
+    removeEventListener("pointermove",mv); removeEventListener("pointerup",up);
+    dragging=false;
+    document.querySelectorAll(".droptarget").forEach(x=>x.classList.remove("droptarget"));
+    if(!moved) return;
+    const w=toWorld(e);
+    const tgt=dropTargetAt(w,n);
+    if(tgt){ n.group=tgt.id; }              // drop on a group = it now belongs there
+    else { delete n.group; n.x=Math.round((w.x-ox)/8)*8; n.y=Math.round((w.y-oy)/8)*8; }
+    markDirty(); render();
+  };
+  addEventListener("pointermove",mv); addEventListener("pointerup",up);
+}
+function startConnect(n,R,ev){
+  S.connectFrom=n; svg.classList.add("connecting");
+  banner(`Connecting from <b>${esc(n.label||n.id)}</b> — click or drop on the target · Esc cancels`,"info",true);
+  const ghost=$("#ghost"); ghost.style.display="";
+  const mv=(e)=>{ const w=toWorld(e);
+    ghost.setAttribute("d",`M${R.x+R.w},${R.y+R.h/2} L${w.x},${w.y}`); };
+  const up=(e)=>{
+    removeEventListener("pointermove",mv); removeEventListener("pointerup",up);
+    ghost.style.display="none";
+    const w=toWorld(e); const L=layout();
+    const tgt=S.doc.nodes.find(m=>m!==n&&L.pos[m.id]
+      &&w.x>=L.pos[m.id].x&&w.x<=L.pos[m.id].x+NW
+      &&w.y>=L.pos[m.id].y&&w.y<=L.pos[m.id].y+NH);
+    if(tgt){ snap();
+      S.doc.edges.push({id:"e"+Date.now().toString(36),from:n.id,to:tgt.id,label:""});
+      endConnectMode(); markDirty(); render(); }
+  };
+  addEventListener("pointermove",mv); addEventListener("pointerup",up);
+}
+function endConnectMode(){
+  S.connectFrom=null; svg.classList.remove("connecting");
+  $("#connect").classList.remove("on"); hideBanner();
+}
+svg.addEventListener("pointerdown",(ev)=>{
+  const sx=ev.clientX, sy=ev.clientY, vx=S.view.x, vy=S.view.y; let panned=false;
+  svg.classList.add("panning");
+  const mv=(e)=>{ if(Math.abs(e.clientX-sx)+Math.abs(e.clientY-sy)>3) panned=true;
+    S.view.x=vx+e.clientX-sx; S.view.y=vy+e.clientY-sy; applyView(); };
+  const up=()=>{ svg.classList.remove("panning");
+    removeEventListener("pointermove",mv); removeEventListener("pointerup",up);
+    if(!panned&&!S.connectFrom) select(null,null); };
+  addEventListener("pointermove",mv); addEventListener("pointerup",up);
+});
+svg.addEventListener("dblclick",(ev)=>{
+  const w=toWorld(ev); snap();
+  const tgt=dropTargetAt(w);
+  const n={id:"n"+Date.now().toString(36),type:"note",label:"New node",sub:"",
+           x:Math.round(w.x/8)*8-NW/2, y:Math.round(w.y/8)*8-NH/2,
+           ...(tgt?{group:tgt.id}:{})};
+  S.doc.nodes.push(n); markDirty(); select(n.id,"node"); render();
+  setTimeout(()=>{const f=$("#f-label"); if(f){f.focus();f.select();}},30);
+});
+svg.addEventListener("wheel",(ev)=>{
+  ev.preventDefault();
+  if(ev.ctrlKey||ev.metaKey){
+    const r=svg.getBoundingClientRect(), mx=ev.clientX-r.left, my=ev.clientY-r.top;
+    const k2=Math.min(2.5,Math.max(.25,S.view.k*(ev.deltaY<0?1.08:0.925)));
+    S.view.x=mx-(mx-S.view.x)*k2/S.view.k; S.view.y=my-(my-S.view.y)*k2/S.view.k; S.view.k=k2;
+  }else{ S.view.x-=ev.deltaX; S.view.y-=ev.deltaY; }
+  applyView();
+  clearTimeout(zoomRenderT); zoomRenderT=setTimeout(()=>render(),120);
+},{passive:false});
+
+// ---------- inspector ----------
+function select(id,kind){ S.sel=id; S.selKind=kind; render(); renderSide(); }
+function statusBlock(n){
+  const h=healthFor(n), tr=trailFor(n);
+  if(!h&&!tr&&!n.port&&!n.trail) return "";
+  let rows="";
+  if(h){
+    const cls=h.cls==="ok"?"ok":(h.cls==="down"||h.cls==="hung")?"bad":"warn";
+    rows+=`<div class="row"><span class="k">health</span><span class="${cls}">${esc(h.text)}</span></div>`;
+    if(h.health) for(const [k,v] of Object.entries(h.health)){
+      if(k==="ok"||k==="service") continue;
+      rows+=`<div class="row"><span class="k">${esc(k)}</span><span class="${v===false?"bad":""}">${esc(String(v)).slice(0,40)}</span></div>`;
+    }
+  }
+  if(tr) rows+=`<div class="row"><span class="k">activity</span><span class="${tr.stale?"warn":"ok"}">${esc(tr.text)}</span></div>`;
+  if(S.live&&S.live.graph&&n.type==="store")
+    for(const [k,v] of Object.entries(S.live.graph))
+      rows+=`<div class="row"><span class="k">${esc(k)}</span><span>${v===null?"?":v}</span></div>`;
+  if(!rows) rows=`<div class="row"><span class="k">no probe or activity trail configured</span></div>`;
+  return `<label>Status</label><div class="statbox">${rows}</div>`;
+}
+function renderSide(){
+  const side=$("#side");
+  if(S.mode==="traj"){ side.innerHTML="<h3>Agent trajectories</h3><div style='color:var(--dim);font-size:12.5px'>Everything the agents actually did — read live from the context graph and the Ad-Bot log. Comment inline on any item.</div>"; return; }
+  if(!S.sel){ side.innerHTML=`<h3>Overview</h3>
+    <div style="color:var(--dim);font-size:12.5px">Each card is one function of your
+    stack; its dot is the worst health inside it. <b>Click a card</b> to open that
+    function — the others close, so you always see one level at a time.
+    Drag an asset onto another group to move it. The <b>?</b> button lists every
+    gesture.</div>`; return; }
+  if(S.selKind==="group"){
+    const g=groupById(S.sel); if(!g) return;
+    const mem=membersOf(g.id);
+    const {state,why}=groupState(g.id);
+    side.innerHTML=`<h3>${esc(g.label)}</h3>
+      <label>Status</label><div class="statbox">
+        <div class="row"><span class="k">rollup</span>
+          <span class="${SEV[state]>2?"bad":SEV[state]>0?"warn":"ok"}">${esc(state)}${why?" — "+esc(why):""}</span></div>
+        <div class="row"><span class="k">assets</span><span>${mem.length}</span></div></div>
+      <label>Name</label><input id="f-glabel" value="${esc(g.label)}">
+      <button class="btn" id="toggleG">${g.collapsed?"Open this function":"Collapse"}</button>
+      <button class="btn" id="delGroup">Delete group (keeps assets)</button>`;
+    $("#f-glabel").onfocus=()=>snap();
+    $("#f-glabel").oninput=(e)=>{g.label=e.target.value; markDirty();};
+    $("#f-glabel").onchange=()=>render();
+    $("#toggleG").onclick=()=>{ snap();
+      if(g.collapsed){ for(const o of S.doc.groups) o.collapsed=(o.id!==g.id); }
+      else g.collapsed=true;
+      markDirty(); render(); renderSide(); };
+    $("#delGroup").onclick=()=>{ snap();
+      const L=layout(); let i=0;
+      for(const n of mem){ const R=L.pos[n.id];
+        if(R){ n.x=R.x; n.y=R.y; } else { n.x=g.x+(i%3)*(NW+16); n.y=g.y+60+Math.floor(i/3)*(NH+14); }
+        delete n.group; i++; }
+      S.doc.groups=S.doc.groups.filter(x=>x.id!==g.id);
+      markDirty(); select(null,null); };
+    return;
+  }
+  if(S.selKind==="edge"){
+    const e=S.doc.edges.find(x=>x.id===S.sel); if(!e) return;
+    const a=nodeById(e.from),b=nodeById(e.to);
+    side.innerHTML=`<h3>Edge</h3>
+      <div style="font-size:12.5px;color:var(--dim)">${esc(a?.label||e.from)} → ${esc(b?.label||e.to)}</div>
+      <label>Label (what flows here)</label><input id="f-elabel" value="${esc(e.label||"")}">
+      <button class="btn" id="delEdge">Delete edge</button>`;
+    $("#f-elabel").onfocus=()=>snap();
+    $("#f-elabel").oninput=(ev)=>{e.label=ev.target.value; markDirty();};
+    $("#f-elabel").onchange=()=>render();
+    $("#delEdge").onclick=()=>{ snap();
+      S.doc.edges=S.doc.edges.filter(x=>x.id!==e.id); markDirty(); select(null,null); };
+    return;
+  }
+  const n=nodeById(S.sel); if(!n) return;
+  const draft=S.drafts[n.id]||"";
+  side.innerHTML=`<h3>${esc(n.label||n.id)}</h3>
+    ${statusBlock(n)}
+    <label>Label</label><input id="f-label" value="${esc(n.label||"")}">
+    <label>Group</label><select id="f-group"><option value="">(none — loose on canvas)</option>
+      ${(S.doc.groups||[]).map(g=>`<option value="${esc(g.id)}" ${n.group===g.id?"selected":""}>${esc(g.label)}</option>`).join("")}</select>
+    <label>Type</label><select id="f-type">${Object.entries(TYPES).map(([k,t])=>
+      `<option value="${k}" ${n.type===k?"selected":""}>${t.label}</option>`).join("")}</select>
+    <label>Subtitle</label><input id="f-sub" value="${esc(n.sub||"")}">
+    <label>Port (live health dot, optional)</label><input id="f-port" value="${esc(n.port||"")}" placeholder="e.g. 8791">
+    <label>Note</label><textarea id="f-note">${esc(n.note||"")}</textarea>
+    <button class="btn" id="delNode">Delete node</button>
+    <h3 style="margin-top:8px">Comments (${commentsFor(n.id).length})</h3>
+    <div id="clist">${commentsFor(n.id).map(c=>`<div class="crow"><div class="meta">
+      <span>${esc(c.by)} · ${esc((c.at||"").slice(5,16).replace("T"," "))}</span>
+      <span class="del" data-c="${c.id}">✕</span></div>${esc(c.text)}</div>`).join("")}</div>
+    <textarea id="f-comment" placeholder="Add a comment… (⌘↩ to send)">${esc(draft)}</textarea>
+    <button class="btn" id="addComment">Comment</button>`;
+  $("#f-label").onfocus=()=>snap();
+  $("#f-label").oninput=(e)=>{n.label=e.target.value; markDirty();};
+  $("#f-label").onchange=()=>render();
+  $("#f-group").onchange=(e)=>{ snap();
+    if(e.target.value) n.group=e.target.value; else delete n.group;
+    markDirty(); render(); };
+  $("#f-type").onchange=(e)=>{ snap(); n.type=e.target.value; markDirty(); render(); };
+  $("#f-sub").onfocus=()=>snap();
+  $("#f-sub").oninput=(e)=>{n.sub=e.target.value; markDirty();};
+  $("#f-sub").onchange=()=>render();
+  $("#f-port").onchange=(e)=>{ snap(); n.port=parseInt(e.target.value)||undefined;
+    markDirty(); render(); };
+  $("#f-note").onchange=(e)=>{ snap(); n.note=e.target.value; markDirty(); };
+  $("#delNode").onclick=()=>{ snap();
+    S.doc.nodes=S.doc.nodes.filter(x=>x.id!==n.id);
+    S.doc.edges=S.doc.edges.filter(x=>x.from!==n.id&&x.to!==n.id);
+    markDirty(); select(null,null); };
+  const cbox=$("#f-comment");
+  cbox.oninput=(e)=>{ S.drafts[n.id]=e.target.value; };
+  cbox.onkeydown=(e)=>{ if((e.metaKey||e.ctrlKey)&&e.key==="Enter") $("#addComment").click(); };
+  $("#addComment").onclick=async()=>{
+    const t=cbox.value.trim(); if(!t) return;
+    const r=await fetch("/api/comment",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({target:n.id,kind:"node",text:t})});
+    if(r.ok){ delete S.drafts[n.id]; await loadDoc(); select(n.id,"node"); }
+    else banner("comment failed — is the helper up?","");
+  };
+  side.querySelectorAll(".del").forEach(d=>d.onclick=async()=>{
+    await fetch("/api/comment/delete",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({id:d.dataset.c})});
+    await loadDoc(); select(n.id,"node");});
+}
+
+// keyboard
+addEventListener("keydown",(ev)=>{
+  if(ev.key==="Escape"&&S.connectFrom){ endConnectMode(); return; }
+  if(/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName||"")) return;
+  if((ev.key==="Backspace"||ev.key==="Delete")&&S.sel){
+    ev.preventDefault(); snap();
+    if(S.selKind==="edge") S.doc.edges=S.doc.edges.filter(x=>x.id!==S.sel);
+    else if(S.selKind==="group"){
+      for(const n of membersOf(S.sel)) delete n.group;
+      S.doc.groups=S.doc.groups.filter(g=>g.id!==S.sel);
+    }else{
+      S.doc.nodes=S.doc.nodes.filter(x=>x.id!==S.sel);
+      S.doc.edges=S.doc.edges.filter(x=>x.from!==S.sel&&x.to!==S.sel);
+    }
+    markDirty(); select(null,null);
+  }
+  if((ev.metaKey||ev.ctrlKey)&&ev.key==="z"){ ev.preventDefault(); doUndo(); }
+});
+function doUndo(){
+  const prev=S.undo.pop(); if(!prev) return;
+  const p=JSON.parse(prev);
+  S.doc.nodes=p.nodes; S.doc.edges=p.edges; S.doc.groups=p.groups||S.doc.groups;
+  S.dirty=true; clearTimeout(saveT); saveT=setTimeout(save,500); render(); renderSide();
+}
+$("#undo").onclick=doUndo;
+$("#addNode").onclick=()=>{
+  snap();
+  const c={x:(svg.clientWidth/2-S.view.x)/S.view.k, y:(svg.clientHeight/2-S.view.y)/S.view.k};
+  const n={id:"n"+Date.now().toString(36),type:"note",label:"New node",sub:"",
+           x:Math.round(c.x/8)*8, y:Math.round(c.y/8)*8};
+  S.doc.nodes.push(n); markDirty(); select(n.id,"node");
+  setTimeout(()=>{const f=$("#f-label"); if(f){f.focus();f.select();}},30);
+};
+$("#addGroup").onclick=()=>{
+  snap();
+  const c={x:(svg.clientWidth/2-S.view.x)/S.view.k, y:(svg.clientHeight/2-S.view.y)/S.view.k};
+  const g={id:"g"+Date.now().toString(36),label:"New group",
+           x:Math.round(c.x/8)*8, y:Math.round(c.y/8)*8, collapsed:true};
+  S.doc.groups.push(g); markDirty(); select(g.id,"group"); render();
+  setTimeout(()=>{const f=$("#f-glabel"); if(f){f.focus();f.select();}},30);
+};
+$("#collapseAll").onclick=()=>{
+  snap(); for(const g of S.doc.groups) g.collapsed=true;
+  markDirty(); select(null,null); render(); $("#fit").click();
+};
+$("#connect").onclick=()=>{
+  if(S.connectFrom){ endConnectMode(); return; }
+  const from=nodeById(S.sel);
+  if(!from){ banner("Select the source asset first, then press Connect, then click the target.","info"); return; }
+  $("#connect").classList.add("on");
+  S.connectFrom=from; svg.classList.add("connecting");
+  banner(`Connecting from <b>${esc(from.label||from.id)}</b> — click the target · Esc cancels`,"info",true);
+};
+$("#fit").onclick=()=>{
+  const L=layout();
+  const rects=[...Object.values(L.pos),...Object.values(L.gRect)]
+    .filter(r=>Number.isFinite(r.x)&&Number.isFinite(r.y));
+  if(!rects.length) return;
+  const minx=Math.min(...rects.map(r=>r.x))-40, miny=Math.min(...rects.map(r=>r.y))-40;
+  const maxx=Math.max(...rects.map(r=>r.x+r.w))+40, maxy=Math.max(...rects.map(r=>r.y+r.h))+40;
+  const k=Math.min(svg.clientWidth/(maxx-minx), svg.clientHeight/(maxy-miny), 1.4);
+  S.view={k, x:-minx*k+(svg.clientWidth-(maxx-minx)*k)/2,
+             y:-miny*k+(svg.clientHeight-(maxy-miny)*k)/2};
+  applyView();
+};
+$("#helpbtn").onclick=()=>{ const p=$("#helppop");
+  p.style.display=p.style.display==="block"?"none":"block"; };
+
+// ---------- trajectories ----------
+async function loadTraj(){
+  S.trajErr=false;
+  try{
+    const r=await fetch("/api/trajectories");
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    const j=await r.json();
+    S.traj=j.items||[]; S.trajSources=j.sources||null;
+  }catch(e){ S.traj=[]; S.trajSources=null; S.trajErr=true; }
+  const agents=[...new Set(S.traj.map(t=>t.agent).filter(Boolean))];
+  const cur=$("#fAgent").value;
+  $("#fAgent").innerHTML='<option value="">all agents</option>'
+    +agents.map(a=>`<option ${a===cur?"selected":""}>${esc(a)}</option>`).join("");
+  renderTraj();
+}
+function renderTraj(){
+  const fa=$("#fAgent").value, fk=$("#fKind").value;
+  const list=S.traj.filter(t=>(!fa||t.agent===fa)&&(!fk||t.kind===fk));
+  const box=$("#traj");
+  let head="";
+  if(S.trajErr) head=`<div class="titem" style="border-color:#7d3a35;color:#f3d3cf">
+      Could not load trajectories — the helper is not answering. This is an error, not a quiet day.</div>`;
+  else if(S.trajSources){
+    const bad=Object.entries(S.trajSources).filter(([k,v])=>v!=="ok");
+    if(bad.length) head=`<div class="titem" style="border-color:#7d3a35;color:#f3d3cf">
+      ${bad.map(([k,v])=>`source <b>${esc(k)}</b> failed: ${esc(v)}`).join("<br>")}</div>`;
+  }
+  if(!list.length){
+    box.innerHTML=head+`<div style="color:var(--dim);padding:30px">${S.trajErr?"":
+      "No agent activity matches this filter."}</div>`;
+    return;
+  }
+  let out=head, lastDay="";
+  const today=new Date().toISOString().slice(0,10);
+  const yest=new Date(Date.now()-86400e3).toISOString().slice(0,10);
+  for(const t of list){
+    const day=(t.at||"").slice(0,10);
+    if(day!==lastDay){ lastDay=day;
+      out+=`<div class="dayhead">${day===today?"Today":day===yest?"Yesterday":day||"undated"}</div>`; }
+    const cs=S.doc.comments.filter(c=>c.target===t.id);
+    out+=`<div class="titem" data-id="${esc(t.id)}">
+      <div class="when">${esc((t.at||"").slice(11,16))}</div>
+      <div class="kind ${esc(t.kind)}">${esc(t.kind)}</div>
+      <div class="body"><b>${esc(t.title)}</b>${t.client?` · <span style="color:var(--dim)">${esc(t.client)}</span>`:""}
+        ${t.url?` · <a href="${esc(t.url)}" target="_blank">open board</a>`:""}
+        <div class="detail">${esc(t.detail||"")} <span style="opacity:.6">· ${esc(t.agent)}</span>
+          ${t.node?`<span class="cbtn" data-node="${esc(t.node)}" style="margin-left:6px">→ show on map</span>`:""}</div>
+        ${cs.map(c=>`<div class="tcomment">💬 <b>${esc(c.by)}</b> ${esc(c.text)}</div>`).join("")}
+        <div class="cform" style="display:none"><input placeholder="Comment… (↩ to send)">
+          <button class="btn mini">Send</button></div>
+      </div><div class="cbtn add">💬 ${cs.length||"comment"}</div></div>`;
+  }
+  box.innerHTML=out;
+  box.querySelectorAll(".cbtn.add").forEach(b=>b.onclick=(ev)=>{
+    const item=ev.target.closest(".titem"), form=item.querySelector(".cform");
+    form.style.display=form.style.display==="none"?"flex":"none";
+    if(form.style.display==="flex") form.querySelector("input").focus();
+  });
+  box.querySelectorAll(".cform").forEach(f=>{
+    const send=async()=>{
+      const inp=f.querySelector("input"), text=inp.value.trim(); if(!text) return;
+      const id=f.closest(".titem").dataset.id;
+      const r=await fetch("/api/comment",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({target:id,kind:"trajectory",text})});
+      if(r.ok){ await loadDoc(); renderTraj(); }
+    };
+    f.querySelector("button").onclick=send;
+    f.querySelector("input").onkeydown=(e)=>{ if(e.key==="Enter") send(); };
+  });
+  box.querySelectorAll("[data-node]").forEach(el=>el.onclick=()=>{
+    const id=el.dataset.node;
+    const n=nodeById(id);
+    if(n){ document.querySelector('.tab[data-tab="map"]').click();
+      if(n.group){ const g=groupById(n.group);
+        if(g&&g.collapsed){ for(const o of S.doc.groups) o.collapsed=(o.id!==g.id); } }
+      select(id,"node"); $("#fit").click(); }
+  });
+}
+$("#fAgent").onchange=renderTraj; $("#fKind").onchange=renderTraj;
+$("#refreshTraj").onclick=loadTraj;
+setInterval(()=>{ if(S.mode!=="traj"||document.visibilityState!=="visible") return;
+  if([...document.querySelectorAll(".cform")].some(f=>f.style.display==="flex")) return;
+  loadTraj(); },15000);
+
+// tabs
+document.querySelectorAll(".tab").forEach(t=>t.onclick=()=>{
+  document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("on",x===t));
+  S.mode=t.dataset.tab;
+  $("#stage").style.display=S.mode==="map"?"":"none";
+  $("#traj").style.display=S.mode==="traj"?"":"none";
+  $("#mapbtns").style.display=S.mode==="map"?"":"none";
+  $("#filters").style.display=S.mode==="traj"?"flex":"none";
+  if(S.mode==="traj") loadTraj();
+  renderSide();
+});
+
+// live status poll — in-place dot updates (full render nuked :hover mid-approach)
+async function pollLive(){
+  try{ S.live=await (await fetch("/api/live")).json(); S.liveOk=true; }
+  catch(e){ S.live=null; S.liveOk=false; }
+  if(S.mode!=="map") return;
+  if(!S.liveOk){ banner("Live status unavailable — the helper stopped answering. Dots are stale.","",true); return; }
+  if(S.live.docError) banner(`⚠ ${esc(S.live.docError)}`,"",true);
+  if(!dragging&&!S.connectFrom){
+    for(const g of nodesG.children){
+      if(g.dataset.id){
+        const n=nodeById(g.dataset.id); if(!n) continue;
+        const dot=g.querySelector(".dot"); if(!dot) continue;
+        dot.setAttribute("class","dot "+nodeState(n));
+      }else if(g.dataset.gid){
+        const {state,why}=groupState(g.dataset.gid);
+        const dot=g.querySelector(".dot");
+        if(dot){ dot.setAttribute("class","dot "+state);
+          const ti=dot.querySelector("title"); if(ti) ti.textContent=state+(why?" — "+why:""); }
+      }
+    }
+    renderDrift();
+  }
+  if(S.sel) renderSide();
+}
+setInterval(pollLive,5000);
+
+loadDoc().then(ok=>{ pollLive(); if(ok) $("#fit").click(); });
+</script></body></html>

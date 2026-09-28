@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Uplane Creative Studio</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="dot"></span>Creative Studio</div>
+    <nav class="tabs">
+      <button class="tab active" data-tab="performance">Performance Review</button>
+      <button class="tab" data-tab="creative">Creative Studio</button>
+    </nav>
+    <div class="topbar-spacer"></div>
+    <button id="open-library" class="topbar-btn" title="All saved creatives per ad">🖼 Creatives</button>
+    <div id="helper-status" class="helper-status" title="local helper">connecting…</div>
+  </header>
+
+  <!-- Creative library modal: all saved creatives per ad for a client -->
+  <div id="creative-library" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3>Creative library</h3>
+        <select id="lib-client"></select>
+        <span id="lib-count" class="muted small"></span>
+        <button id="lib-close" class="icon-btn" title="Close">✕</button>
+      </div>
+      <div id="lib-body" class="lib-body"></div>
+    </div>
+  </div>
+
+  <!-- Enlarged creative preview (click a library thumbnail; videos play with sound) -->
+  <div id="creative-preview" class="modal hidden">
+    <div class="preview-card">
+      <button id="prev-close" class="icon-btn preview-close" title="Close">✕</button>
+      <div id="prev-body" class="preview-body"></div>
+      <div id="prev-name" class="preview-name muted small"></div>
+    </div>
+  </div>
+
+  <div class="layout">
+    <!-- Sidebar: one living profile per client -->
+    <aside class="sidebar">
+      <div class="sidebar-head">
+        <span>Client profiles</span>
+        <button id="refresh-views" class="icon-btn" title="Refresh">⟳</button>
+      </div>
+      <div id="views-list" class="views-list">
+        <div class="muted small">No client profiles yet.</div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <!-- ================= TAB 1: PERFORMANCE REVIEW ================= -->
+      <section id="tab-performance" class="tab-panel active">
+
+        <!-- Upload + filter screen -->
+        <div id="upload-screen" class="screen">
+          <h1>Review creative performance</h1>
+          <p class="muted">Upload a Meta Ads Manager CSV (two reporting periods) and we'll sort every ad into performance buckets.</p>
+
+          <div class="setup-row">
+            <label class="field">
+              <span class="field-label">Client</span>
+              <select id="client-select"><option value="">Loading…</option></select>
+            </label>
+            <div class="field setup-hint">
+              <span class="muted small">Upload a CSV with both image and video ads — add a creative to each ad in the results, and the analysis splits them by type automatically.</span>
+            </div>
+          </div>
+
+          <div id="dropzone" class="dropzone">
+            <input type="file" id="csv-input" accept=".csv" hidden />
+            <div class="dropzone-inner">
+              <div class="dz-icon">⬆</div>
+              <div><strong>Drop your CSV here</strong> or <span class="link">browse</span></div>
+              <div class="muted small" id="dz-filename"></div>
+            </div>
+          </div>
+
+          <div id="inspect-error" class="alert error hidden"></div>
+
+          <!-- Filter panel (revealed after a successful inspect) -->
+          <div id="filter-panel" class="filter-panel hidden">
+            <div class="inspect-summary" id="inspect-summary"></div>
+
+            <section class="setup-creatives-block">
+              <div class="scb-head">
+                <h3>Add creatives <span class="muted small">(optional)</span></h3>
+                <span class="muted small">Drop an image or video onto each ad — used to show the creative and split image vs. video in the analysis. No creative? Tag it IMG/VID (or use the bulk buttons) so it still counts in the split.</span>
+              </div>
+              <div id="scb-bulk" class="scb-bulk hidden"></div>
+              <div id="setup-creatives" class="setup-creatives"></div>
+            </section>
+
+            <div class="filters-grid">
+              <fieldset class="filter-block">
+                <legend>Ad delivery</legend>
+                <div id="delivery-options" class="check-row"></div>
+              </fieldset>
+
+              <fieldset class="filter-block" id="imp-block">
+                <legend>Impressions — more than <span class="muted small">(both periods)</span></legend>
+                <div class="metric-radios" data-metric="impressions"></div>
+              </fieldset>
+
+              <fieldset class="filter-block" id="ctr-block">
+                <legend>CTR — higher than <span class="muted small">(both periods)</span></legend>
+                <div class="metric-radios" data-metric="ctr"></div>
+              </fieldset>
+
+              <fieldset class="filter-block" id="cpa-block">
+                <legend>Cost per result — less than <span class="muted small">(both periods)</span></legend>
+                <div class="metric-radios" data-metric="cpa"></div>
+              </fieldset>
+
+              <fieldset class="filter-block">
+                <legend>Display</legend>
+                <label class="inline-field"># of ads per category
+                  <input type="number" id="per-category" min="1" value="10" />
+                </label>
+                <label class="inline-field">Percentile cutoff (high/low split)
+                  <span class="suffix-input"><input type="number" id="percentile" min="1" max="99" value="50" />%</span>
+                </label>
+              </fieldset>
+            </div>
+
+            <button id="analyze-btn" class="primary-btn">Run analysis →</button>
+          </div>
+        </div>
+
+        <!-- Results screen -->
+        <div id="results-screen" class="screen hidden">
+          <div class="results-head">
+            <div>
+              <div id="loaded-banner" class="loaded-banner hidden"></div>
+              <h1 id="results-title">Results</h1>
+              <div id="period-header" class="period-header"></div>
+              <div id="counts-line" class="muted small"></div>
+            </div>
+            <div class="results-actions">
+              <button id="back-to-analysis-btn" class="ghost-btn hidden">← Back to analysis</button>
+              <button id="pull-creatives-btn" class="ghost-btn">Pull creatives</button>
+              <button id="build-creative-btn" class="primary-btn">Build creative from this →</button>
+              <button id="new-analysis-btn" class="ghost-btn">New analysis</button>
+            </div>
+          </div>
+
+          <div id="results-warn" class="results-warn hidden"></div>
+          <div id="summary-panel" class="summary-panel"></div>
+          <div id="bench-bar" class="bench-bar"></div>
+          <div id="creative-help" class="creative-help hidden"></div>
+          <div id="media-bar" class="media-bar"></div>
+          <div id="view-toggle" class="view-toggle hidden"></div>
+
+          <div class="age-bar">
+            <span class="age-label">Age segment:</span>
+            <div id="age-chips" class="age-chips"></div>
+            <span id="age-disabled-note" class="muted small hidden">No age-segment data in this file; showing all ages.</span>
+          </div>
+
+          <input type="file" id="creative-file" accept="image/*,video/*" hidden />
+          <div id="adset-view" class="hidden"></div>
+          <div id="categories"></div>
+        </div>
+      </section>
+
+      <!-- ================= TAB 2: CREATIVE STUDIO ================= -->
+      <section id="tab-creative" class="tab-panel">
+        <!-- entry -->
+        <div id="cs-entry" class="screen">
+          <h1>Creative Studio</h1>
+          <p class="muted">Generate creative prompts grounded in what's winning. Pick a source: a client's <b>performance profile</b>, an analyzed <b>marketing link</b>, your <b>own uploaded images</b>, or hand-picked <b>individual creatives</b>.</p>
+
+          <div class="setup-row">
+            <div class="field hidden">
+              <span class="field-label">Type</span>
+              <div class="toggle" id="cs-adtype">
+                <button class="toggle-opt active" data-adtype="image">Image</button>
+                <button class="toggle-opt" data-adtype="video">Video</button>
+              </div>
+            </div>
+            <div class="field">
+              <span class="field-label">Source</span>
+              <div class="toggle" id="cs-source">
+                <button class="toggle-opt active" data-source="profile">Performance profile</button>
+                <button class="toggle-opt" data-source="links">Marketing links</button>
+                <button class="toggle-opt" data-source="upload">Upload your own</button>
+                <button class="toggle-opt" data-source="picked">Individual creatives</button>
+              </div>
+            </div>
+          </div>
+
+          <div id="cs-profile-wrap">
+            <div class="cs-pick-label muted small">Build from what's working for a client — updates automatically each time you analyze them.</div>
+            <div class="cs-profile-pick">
+              <span class="muted small">Client</span>
+              <select id="cs-profile-client"></select>
+            </div>
+            <div id="cs-profile-card"></div>
+          </div>
+          <div id="cs-link-wrap" class="hidden">
+            <div class="cs-pick-label muted small">Pick an analyzed marketing link — its ideas are ready to build from. Dropped &amp; analyzed in the <a href="http://localhost:8787/notes" target="_blank" rel="noopener">control center</a>.</div>
+            <div id="cs-link-list" class="cs-link-list"></div>
+          </div>
+          <div id="cs-upload-wrap" class="hidden">
+            <div class="cs-pick-label muted small">Upload your own creatives, then fit-check each against a client's winning formula — what to keep, what to recreate.</div>
+            <div class="cs-upload-pick">
+              <span class="muted small">Fit against</span>
+              <select id="cs-upload-client"></select>
+            </div>
+            <div id="cs-dropzone" class="cs-dropzone">
+              <input type="file" id="cs-upload-file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden />
+              <div class="cs-dz-inner">Drop images here, or <span class="link">browse</span>
+                <div class="muted small">PNG / JPG / WebP · upload as many separate images as you like</div></div>
+            </div>
+            <div id="cs-upload-list" class="cs-upload-list"></div>
+            <div id="cs-upload-actions" class="cs-upload-actions hidden">
+              <button id="cs-fitcheck-btn" class="cs-gen-btn">Build prompts against <span id="cs-fc-client"></span> →</button>
+            </div>
+            <div id="cs-fitcheck-results"></div>
+          </div>
+          <div id="cs-picked-wrap" class="hidden">
+            <div class="cs-pick-label muted small">Hand-pick analyzed creatives from any client, then build prompts grounded in a chosen client's winning formula. Pick the build mode per card; the fit score updates as you tweak it.</div>
+            <div class="cs-picked-controls">
+              <span class="muted small">Ground against</span>
+              <select id="cs-pick-ground"></select>
+              <button id="cs-pick-build" class="cs-gen-btn" disabled>Build <span id="cs-pick-n">0</span> selected →</button>
+            </div>
+            <div id="cs-pick-grid" class="cs-pick-grid"></div>
+          </div>
+        </div>
+
+        <!-- results -->
+        <div id="cs-results" class="screen hidden">
+          <div class="results-head">
+            <div>
+              <h1 id="cs-title">Creative Studio</h1>
+              <div id="cs-sub" class="muted small"></div>
+            </div>
+            <div class="results-actions">
+              <button id="cs-back" class="ghost-btn">← New import</button>
+            </div>
+          </div>
+          <div id="cs-formula"></div>
+          <div id="cs-typefilter" class="cs-typefilter"></div>
+          <div id="cs-traits"></div>
+          <div id="cs-explore" class="cs-explore"></div>
+          <div id="cs-cards"></div>
+        </div>
+
+        <!-- loading -->
+        <div id="cs-loading" class="screen hidden">
+          <div class="cs-loading-box">
+            <div class="spinner"></div>
+            <div id="cs-loading-text">Reading the creatives…</div>
+            <div class="cs-progress indet"><div id="cs-progress-fill" class="cs-progress-fill"></div></div>
+            <div id="cs-progress-label" class="muted small"></div>
+            <div class="muted small">Uses your <code>claude</code> login (or an API key) to label each creative against the schema. First run is slow; results are cached.</div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

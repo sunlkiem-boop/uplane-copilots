@@ -1,0 +1,37 @@
+{
+  "manifest_version": 3,
+  "name": "Uplane Edit Capture",
+  "version": "0.2.0",
+  "description": "Notes what you fix in the Uplane editor (and why), snapshots the creative before/after, and logs it all to the local context graph.",
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://app.uplane.com/*"
+      ],
+      "js": [
+        "keyguard.js"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://app.uplane.com/*"
+      ],
+      "js": [
+        "capture-core.js",
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "permissions": [
+    "tabs",
+    "scripting"
+  ]
+}

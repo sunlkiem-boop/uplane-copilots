@@ -1,0 +1,22 @@
+{
+  "brand_name": "",
+  "brand_slug": "",
+  "niche": "",
+  "what_you_sell_and_to_whom": "",
+  "product_name": "",
+  "product_type": "",
+  "language": "English",
+  "product_image_filename": "",
+  "documents_folder": "documents",
+
+  "_help": {
+    "brand_name": "Customer brand name shown in reports (e.g., 'Acme Skincare').",
+    "brand_slug": "Set automatically by init_brand.py from the slug arg. Used as the folder name and in report filenames.",
+    "niche": "Short category descriptor (e.g., 'natural skincare', 'fitness apparel', 'meal kits').",
+    "what_you_sell_and_to_whom": "One-line description of product + target audience (e.g., 'anti-aging serums to women aged 35-55 who want clean ingredients').",
+    "product_name": "Exact product name to feature in generated ads (e.g., 'Acme Renewal Serum').",
+    "product_type": "Form factor / packaging description (e.g., '30ml glass dropper bottle with white label').",
+    "language": "Language used for text overlays in generated ads (default: 'English').",
+    "product_image_filename": "Filename of the high-quality product image you'll drop in this brand folder. The skill will attach this image alongside the prompt when you generate creatives. Leave blank if you don't have one yet."
+  }
+}
